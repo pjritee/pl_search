@@ -1,4 +1,4 @@
-from prolog import *
+import pl_search as pls
 
 #   SEND
 # + MORE
