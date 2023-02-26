@@ -63,7 +63,14 @@ class PuzzleHandler(pls.ChoiceHandler):
             if pls.var(v):
                 return v
         return None
-    
+
+class SuccessPrint(pls.Success):
+    def make_call(self):
+        print(f'   {S}{E}{N}{D}')
+        print(f' + {M}{O}{R}{E}')
+        print(' ------')
+        print(f'  {M}{O}{N}{E}{Y}')
+        return pls.Status.SUCCESS
 
 class SmartPuzzleHandler(PuzzleHandler):
     def test_choice(self):
@@ -99,16 +106,16 @@ class SmartPuzzleHandler(PuzzleHandler):
                 break
         return True
 
+S = PuzzleVar(DIGITS)
+E = PuzzleVar(DIGITS0)
+N = PuzzleVar(DIGITS0)
+D = PuzzleVar(DIGITS0)
+M = PuzzleVar({1,2})
+O = PuzzleVar(DIGITS0)
+R = PuzzleVar(DIGITS0)
+Y = PuzzleVar(DIGITS0)
     
 def solve():
-    S = PuzzleVar(DIGITS)
-    E = PuzzleVar(DIGITS0)
-    N = PuzzleVar(DIGITS0)
-    D = PuzzleVar(DIGITS0)
-    M = PuzzleVar({1,2})
-    O = PuzzleVar(DIGITS0)
-    R = PuzzleVar(DIGITS0)
-    Y = PuzzleVar(DIGITS0)
     C1 = PuzzleVar(CARRY)
     C2 = PuzzleVar(CARRY)
     C3 = PuzzleVar(CARRY) 
@@ -130,12 +137,8 @@ def solve():
         ]
 
     all_vars = disjoint + [C1,C2,C3]
-    result = pls.engine.execute(pls.ChoicePred(SmartPuzzleHandler, (constraint_sums, all_vars), pls.Success()))
+    result = pls.engine.execute(pls.ChoicePred(SmartPuzzleHandler, (constraint_sums, all_vars), SuccessPrint()))
 
-    print(f'{result = }')
-    if result:
-        print(f'   {S}{E}{N}{D}')
-        print(f' + {M}{O}{R}{E}')
-        print(' ------')
-        print(f'  {M}{O}{N}{E}{Y}')
     
+if __name__ == "__main__":
+    solve()
