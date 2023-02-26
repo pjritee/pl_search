@@ -1,1 +1,1 @@
-#A package for searching and constraint programming using Prolog ideas
+# A package for searching and constraint programming using Prolog ideas
