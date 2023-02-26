@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name='pl_search',
     version='0.1',
-    packages=find_packages(exclude=['tests*']),
+    packages=['pl_search'],
     license='MIT',
     description='A package for searching and constraint programming using Prolog ideas.',
     long_description=open('README.md').read(),
