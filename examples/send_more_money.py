@@ -9,7 +9,7 @@ DIGITS0 = {0,1,2,3,4,5,6,7,8,9}
 DIGITS = {1,2,3,4,5,6,7,8,9}
 CARRY = {0,1,2}
 
-class PuzzleVar(Var):
+class PuzzleVar(pls.Var):
     def __init__(self, choices):
         super().__init__()
         self.choices = choices
@@ -26,11 +26,11 @@ class PuzzleVar(Var):
         return True
          
     def get_choices(self):
-        known_disjoints = {prolog.dereference(n) for n in self.disjoint
-                           if not var(n)}
+        known_disjoints = {pls.engine.dereference(n) for n in self.disjoint
+                           if not pls.var(n)}
         return list(self.choices.difference(known_disjoints))
 
-class PuzzleHandler(Handler):
+class PuzzleHandler(pls.ChoiceHandler):
     def __init__(self, args):
         self.constraint_sums, self.all_vars = args
         self.best_var = None
@@ -47,12 +47,12 @@ class PuzzleHandler(Handler):
 
     def make_choice(self):
         choice = next(self.choice_iter)
-        return prolog.unify(self.best_var, choice) and self.test_choice()
+        return pls.engine.unify(self.best_var, choice) and self.test_choice()
    
     def test_choice(self):
         for left, right in self.constraint_sums:            
-            if all(not var(x) for x in left) and \
-               all(not var(x) for x in right):
+            if all(not pls.var(x) for x in left) and \
+               all(not pls.var(x) for x in right):
                  if sum(x.deref() for x in left) != \
                     right[0].deref() + 10*right[1].deref():
                      return False
@@ -60,7 +60,7 @@ class PuzzleHandler(Handler):
 
     def get_best_var(self):
         for v in self.all_vars:
-            if var(v):
+            if pls.var(v):
                 return v
         return None
     
@@ -70,20 +70,20 @@ class SmartPuzzleHandler(PuzzleHandler):
         while True:
             progress = False
             for left, right in self.constraint_sums:
-                left = [prolog.dereference(x) for x in left]
-                right = [prolog.dereference(x) for x in right]
-                ground_left = [x for x in left if not var(x)]
-                ground_right = [x for x in right if not var(x)]
+                left = [pls.engine.dereference(x) for x in left]
+                right = [pls.engine.dereference(x) for x in right]
+                ground_left = [x for x in left if not pls.var(x)]
+                ground_right = [x for x in right if not pls.var(x)]
                 
                 if len(left) == len(ground_left):
                     # above the line is ground and so we know
                     # what is below the line and the carry
-                    top = sum(left)
-                    if any(var(x) for x in right):
+                    top = sum(ground_left)
+                    if any(pls.var(x) for x in right):
                         progress = True
                     c,d = divmod(top, 10)
-                    if not prolog.unify(right[0], d) or \
-                       not prolog.unify(right[1], c):
+                    if not pls.engine.unify(right[0], d) or \
+                       not pls.engine.unify(right[1], c):
                         return False
                 elif len(left) == len(ground_left)+1 and \
                      len(right) == len(ground_right):
@@ -93,7 +93,7 @@ class SmartPuzzleHandler(PuzzleHandler):
                     left_vars = [v for v in left if v not in right]
                     n = right[0] + 10*right[1] - sum(ground_left)
                     progress = True
-                    if not prolog.unify(left_vars[0], n):
+                    if not pls.engine.unify(left_vars[0], n):
                         return False
             if not progress:
                 break
@@ -130,7 +130,7 @@ def solve():
         ]
 
     all_vars = disjoint + [C1,C2,C3]
-    result = prolog.execute(ChoicePred(SmartPuzzleHandler, (constraint_sums, all_vars), Success()))
+    result = pls.engine.execute(pls.ChoicePred(SmartPuzzleHandler, (constraint_sums, all_vars), pls.Success()))
 
     print(f'{result = }')
     if result:
