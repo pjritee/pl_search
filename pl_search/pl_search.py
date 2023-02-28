@@ -1,7 +1,15 @@
+"""
+This module provides reasonably generic search/constraint solving
+capabilities using Prolog ideas. It does not even come close to an 
+implementation of Prolog - it simply uses ideas from Prolog like variables 
+and backtrack search implemented using a simplified trail and 
+environment stack.
 
-# This package provides reasonably generic search/constraint solving
-# capabilities using Prolog ideas.
+For a given application the programmer typically defines a subclass
+of Pred for carrying out the search and, typically, a subclass of
+Success or Fail for printing one solution or all solutions respectively.
 
+"""
 ####################################
 # The MIT License (MIT)
 #
@@ -26,38 +34,31 @@
 # THE SOFTWARE.
 ####################################
 
-# This package does not even come close to an implementation of Prolog - it
-# simply uses ideas from Prolog like variables and backtrack search implemented
-# using a simplified trail and environment stack.
 
 from enum import Enum, auto
 from typing import Protocol
 from typing import Generator
 
-# Engine execution status
 class Status(Enum):
+    """ Engine execution status """
     EXIT = auto()
     FAILURE = auto()
     SUCCESS = auto()
 
-# Predicates approximate Prolog predicates.
-# For a given application the programmer typically defines one or more
-# predicates for carrying out the search and, typically, a subclass of
-# Success or Fail for printing one solution or all solutions respectively.
 
 class Pred(Protocol):
-
-    # the definition for the initial call
+    """ Approximates Prolog predicates."""
     def make_call(self) -> Status:
+        """The definition for the initial call on the predicate."""
         ...
 
-    # the definition for retrying the call
     def retry_call(self) -> Status:
+        """The definition for retrying the call on backtracking."""
         ...
 
 
-# The special Exit predicate - for internal use.
 class Exit(Pred):
+    """A special predicate to exit engine execution - for internal use."""
     def make_call(self) -> Status:
         return Status.EXIT
 
@@ -72,6 +73,7 @@ class Exit(Pred):
     
 # For exiting the engine with success
 class Success(Pred):
+    """Similar to 'true' in Prolog - typically used as a continuation."""
     def make_call(self) -> Status:
         return Status.SUCCESS
 
@@ -82,13 +84,13 @@ class Success(Pred):
     def __repr__(self):
         return 'Success Predicate'
 
-# Like the Prolog fail - triggers backtracking
 class Fail(Pred):
-    def make_call(self):
+    """Similar to 'fail' in Prolog - typically used as a continuation."""
+    def make_call(self) -> Status:
         return Status.FAILURE
 
-    def retry_call(self):
-        engine.pop_call()
+    def retry_call(self) -> Status:
+        # never gets here but some defn is needed
         return Status.FAILURE
 
     def __repr__(self):
@@ -103,7 +105,18 @@ class Fail(Pred):
 # are bound as part of making a call on the predicate
 
 class Environment:
+    """An approximation of a Prolog environment for managing backtracking
+    and retrying predicate calls. This is for internal use.
 
+    Attributes:
+        trail: a list of (variable, oldvalue) pairs - on backtracking the
+               current value of variable is reset to oldvalue for each
+               variable in trail.
+        pred: the called predicate that created this environment - on
+              backtracking the retry_call method of pred is called
+              in order to find alternative solutions for pred
+    
+    """
     def __init__(self, pred:Pred):
         self.trail = []
         self.pred = pred
@@ -113,16 +126,13 @@ class Environment:
         return f'Environment({self.pred})'
 
     def trail_var(self, pvar:"Var"):
-        # trail var - this is always called before binding the var
-        # and so pvar.value is the "old" value of the variable.
-        # For normal variables (standard Prolog variables) the old value
-        # is None
+        """To be called BEFORE binding the variable so that
+        pvar.value is the old value of the variable.
+        """
         self.trail.append((pvar, pvar.value))
 
     def backtrack(self):
-        # backtrack over var bindings - these are the variables
-        # that have been bound by the predicate call and so all
-        # need to be reset when backtracking over the predicate call.
+        """Backtrack over (reset) all the var bindings in the trail."""
         while self.trail:
             v, oldvalue = self.trail.pop()
             v.reset(oldvalue)
@@ -131,30 +141,48 @@ class Environment:
         return str(self.pred)
 
 class EnvironmentStack:
+    """An approximation of a Prolog environment stack. It is a list of
+    Environments - one for each predicate in the call stack. The stack is
+    created by making a predicate call and then calling it's continuation
+    predicate (and possibly the continuations continuation etc.).
+    This is for internal use.
+    """
     def __init__(self):
-        # Add a sentinal to the "call stack" so that
-        # when there are no more choices (i.e. we backtrack to the beginning)
-        # then we exit the engine's computatuion.
+        """The stack is initialized with a sentinal so that if execution
+        backtracks to before the initial predicate call the engine
+        exicution will terminate.
+        """
         self.env_stack = [Environment(Exit())]
 
     def trail(self, v:"Var"):
+        """Trail v in the current (top) environment. """
         self.env_stack[-1].trail_var(v)
 
     def backtrack(self):
+        """Backtrack in the current (top) environment. """
         self.env_stack[-1].backtrack()
 
     def push(self, pred:Pred):
+        """Add a new environment for pred."""
         self.env_stack.append(Environment(pred))
 
     def pop(self) -> Pred:
+        """Remove the current environment, bactrack in that environment
+        and return that environment so that the pred can be retried.
+        """
+        
         env = self.env_stack.pop()
         env.backtrack()
         return env.pred
     
     def top(self) -> Environment:
+        """Return the current (top) environment."""
         return self.env_stack[-1]
 
     def clear(self):
+        """Clear the environment stack - i.e. backtrack to before
+        the first pred call.
+        """
         while self.env_stack:
             self.pop()
         self.env_stack = [Environment(Exit())]
@@ -165,21 +193,32 @@ class EnvironmentStack:
 # The engine is responsible for calling the required predicates and managing
 # backtracking.
 class Engine:
+    """Engine is responsible for managing the execution (calling) of the
+    supplied predicate (and it's continuation). This includes managing
+    the environment stack, dereferencing terms, unifying terms,
+    backtracking and retrying predicates.
+    """
     def __init__(self):
         self.env_stack = EnvironmentStack()
 
-    def dereference(self, t1) -> object:
-        # dereference derefs vars and leaves everything else unchanged
+    def dereference(self, t1:object) -> object:
+        """Return the dereference of the argument."""
         if isinstance(t1, Var):
             return t1.deref()
         return t1
 
     # Sometimes it may be useful to dereference an entire list of terms.
-    def dereference_list(self, lst) -> list[object]:
+    def dereference_list(self, lst:list[object]) -> list[object]:
+        """Return the list of the dereferenced elements of the input."""
         return [self.dereference(x) for x in lst]
 
-    def unify(self, t1, t2) -> bool:
-        # unification
+    def unify(self, t1:object, t2:object) -> bool:
+        """Similar to Prolog most general unification algorithm:
+        return False if there are no possible bindings of the
+        variables in the arguments that make the terms the same.
+        If there are apply the most general unifier (binding of variables)
+        and return True.
+        """
         t1 = self.dereference(t1)
         t2 = self.dereference(t2)
         if t1 == t2:
@@ -200,9 +239,11 @@ class Engine:
             return isinstance(t2, list) and len(t1) == len(t2) and \
                 all(self.unify(x, y) for x,y in zip(t1, t2))
         # approximate unification with other kinds of terms
-        # by having a unify_with method in a class - this extends
-        # unification to include unification of Python objects (where
-        # it makes sense)
+        # by having a unify_with method in each class of relevant
+        # terms - this extends unification to include unification of
+        # Python objects (where it makes sense).
+        # An example is where the programmer might want the equivalent
+        # of specific kinds of 'compound terms' that could contain variables.
         if hasattr(t1, 'unify_with'):
             return t1.unify_with(t2)
         if hasattr(t2, 'unify_with'):
@@ -210,28 +251,32 @@ class Engine:
         return False
 
     def backtrack(self):
-        # lifting of choicepoint version
+        """Lifting backtrack from the environment stack."""
         self.env_stack.backtrack()
 
     def push(self, pred:Pred):
-        # add a new call and call it
+        """Add a new predicate to the environment stack."""
         self.env_stack.push(pred)
 
     def push_and_call(self, pred:Pred) -> Status:
-        # add a new call and call it
+        """Add a new predicate to the environment stack and
+        call that predicate.
+        """
         self.env_stack.push(pred)
         return pred.make_call()
 
     def pop_call(self) -> Pred:
-        # remove old call - note the pop'ed call is returned
-        # to be used for retrying
+        """Lifting of pop for the environment stack."""
         return self.env_stack.pop()
 
     def current_call(self) -> Pred:
-        # get the call from the top env
+        """Return the current (top) call on the environment stack."""
         return self.env_stack.top().pred
 
     def execute(self, pred:Pred) -> bool:
+        """Execute (call) the supplied predicate returning True
+        iff the call succeeds.
+        """
         status = self.push_and_call(pred)
 
         while status == Status.FAILURE:
@@ -239,23 +284,32 @@ class Engine:
             self.backtrack()
             pred_call = self.current_call()
             status = pred_call.retry_call()
+        # Note that the following clears the environment stack
+        # including backtracking over all variable bindings
+        # and so all binding created by a successful search will be lost.
+        # This means the programmer will need to output any relevant
+        # information from a successful search in the continuation. 
         self.env_stack.clear()
         return status == Status.SUCCESS
 
 #### !!! NOTE !!!
 #### A single global instance of the Engine class is created
-#### so that this instance can be accessed everywhere.
+#### so that this instance can be accessed everywhere within the application.
 
 engine = Engine()
 
 # a test to see if a term is a variable (after deref) -
 # like the Prolog var test
 def var(t):
+    """Return True iff the argument is a variable after dereferencing."""
     return isinstance(t, Var) and isinstance(t.deref(), Var)
 
 # The only Prolog data structure is  Var - for all other cases we use
 # Python data structtures
 class Var:
+    """
+    
+    """
     # for generating id's of variables
     c = 0
 
@@ -353,21 +407,6 @@ class UpdatableVar(Var):
 
     def __repr__(self):
         return f'UpdatableVar({self.value})'
-
-# The fail predicate
-class Fail(Pred):
-    def make_call(self):
-        return Status.FAILURE
-
-    def retry_call(self):
-        engine.pop_call()
-        return Status.FAILURE
-
-    def reset(self):
-        pass
-
-    def __repr__(self):
-        return 'Fail Predicate'
 
 # For use in ChoicePred below for generating choices then making (and testing)
 # those choices.
