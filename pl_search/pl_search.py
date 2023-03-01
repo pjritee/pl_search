@@ -1,15 +1,4 @@
-"""
-This module provides reasonably generic search/constraint solving
-capabilities using Prolog ideas. It does not even come close to an 
-implementation of Prolog - it simply uses ideas from Prolog like variables 
-and backtrack search implemented using a simplified trail and 
-environment stack.
 
-For a given application the programmer typically defines a subclass
-of Pred for carrying out the search and, typically, a subclass of
-Success or Fail for printing one solution or all solutions respectively.
-
-"""
 ####################################
 # The MIT License (MIT)
 #
@@ -34,6 +23,93 @@ Success or Fail for printing one solution or all solutions respectively.
 # THE SOFTWARE.
 ####################################
 
+"""
+This module provides reasonably generic search/constraint solving
+capabilities using Prolog ideas. It does not even come close to an 
+implementation of Prolog - it simply uses ideas from Prolog like variables 
+and backtrack search implemented using a simplified trail and 
+environment stack.
+
+For a given application the programmer typically defines a subclass
+of Pred for carrying out the search and, typically, a subclass of
+Success or Fail for printing one solution or all solutions respectively.
+
+An example of using this module is given in examples/send_more_money.py
+that covers a significant portion of the use of the module.
+
+Below is a description of how some approaches for solving search problems
+in Prolog are translated into Python using this module.
+
+The first approach in Prolog follows the pattern:
+
+    solve(State), print_answer(State).
+
+where solve is completely implemented in Prolog. Calling this query (a pair
+of predicate calls) would use backtracking search to attempt to find, 
+and print a solution.
+
+Using this module the programmer would need to set up a Python equivalent of
+State using Var objects for the unknowns and then defining a Pred class
+where make_call initialises and starts the search and where retry_call
+deals with backtracking and trying alternatives.
+
+The programmer will typically inherit from the Success predicate that will
+print out the answer as part of it's make_call.
+
+The equivalent of calling the query might be something like
+
+engine.execute(python_pred, python_state,  python_print_success(python_state))
+
+In Prolog, if we want all solutions, we would write:
+
+    solve(State), print_answer(State), fail.
+
+In this case the programmer would inherit from the Fail predicate and we
+would get something like
+
+engine.execute(python_pred, python_state,  python_print_fail(python_state))
+
+The second approach is to follow a standard Prolog pattern as described
+later in ChoicePred where the Prolog implementation of solve follows the
+pattern
+
+    solve(State) :-
+        pick_var(State, Var),
+        !,
+        generate_var_choices(State, Var, Choices),
+        member(Var, Choices),
+        check_choice(State),
+        solve(State).
+    solve(_).
+
+ChoicePred follows this pattern, simplifying the problem for the programmer.
+The programmer now only needs to answer the following questions to create
+an implementation.
+
+1. How do I pick a variable to choose possible values for?
+2. What are the possible values for this variable?
+3. How do I check that a given choice is valid?
+4. (optionally) Are there any deductions that can be made given the choice?
+
+To program answers to these questions the programmer can define a ChoiceHandler
+where generate_choice answers 1. and 2. and make_choice (after binding the
+variable to the choice) answers 3. and 4.
+
+The send_more_money uses this approach where solving the puzzle is done as 
+follows (where SmartPuzzleHandler implements the answers the above questions).
+
+engine.execute(ChoicePred(SmartPuzzleHandler, 
+               (constraint_sums, all_vars), 
+               SuccessPrint()))
+
+Sometimes, in Prolog, we might break down the search into parts:
+
+solve_part1(State), solve_part2(State), .....
+
+In this case the equivalent of solve_part2 would be a Pred with its own
+continuation and would be the continuation of the equivalent of solve_part1.
+
+"""
 
 from enum import Enum, auto
 from typing import Protocol
@@ -307,23 +383,32 @@ def var(t):
 # The only Prolog data structure is  Var - for all other cases we use
 # Python data structtures
 class Var:
-    """
-    
+    """Var is like a Prolog variable.
+
+    Class Attribute:
+        c : counter for generating unique ID's
+
+    Attributes:
+        id_: a unique ID (int)
+        value: If the variable is unbound this is None otherwise it
+               it is the value the variable is bound (instantiated) to.
     """
     # for generating id's of variables
     c = 0
 
     @classmethod
-    def update(cls):
+    def update(cls) -> int:
+        """Return the next ID"""
         cls.c += 1
         return cls.c
 
     @classmethod
     def reset_count(cls):
+        """Reset the counter - in an application where multiple searches
+        are carried out then resetting the counter between searches reduces
+        the size of the string representation of the variable."""
         cls.c = 0
 
-    # A variable consists of an ID and a value if the variable is not bound
-    # then the value is None
     def __init__(self):
         self.id_ =  self.update()
         self.value = None
@@ -335,7 +420,9 @@ class Var:
             return f"X{val.id_:02d}"
         return f"{val}"
 
-    def deref(self):
+    def deref(self) -> object:
+        """Return self if the variable is unbound otherwise follow the
+        dereference chain and return the untimate value."""
         val = self
         while True:
             if val.value is None:
@@ -350,7 +437,8 @@ class Var:
         assert False
 
     # bind an unbound variable
-    def bind(self, val):
+    def bind(self, val:object):
+        """Bind the variable to the supplied value."""
         # check unbound
         assert isinstance(self, UpdatableVar) or self.value is None
         # check we don't get a loop
@@ -360,11 +448,12 @@ class Var:
         return True
 
     #  (for backtracking)
-    def reset(self, oldvalue):
+    def reset(self, oldvalue:object):
+        """Reset the value to the supplied value - called when untrailing."""
         self.value = oldvalue
 
-    # test for equality of this var with other
-    def __eq__(self, other):
+    def __eq__(self, other:object):
+        """Test for equality of this var with the supplied term."""
         # deref v and other
         v = self.deref()
         if var(other):
@@ -375,7 +464,8 @@ class Var:
             return False
         return v == other
 
-    def __lt__(self, other):
+    def __lt__(self, other:object):
+        """Like the @< test in Prolog."""
         # deref v
         v = self.deref()
         if var(other):
@@ -392,14 +482,23 @@ class Var:
         return v < other
 
 class UpdatableVar(Var):
-    def __init__(self, initialval):
+    """UpdatableVar is used to implement what some Prologs call
+    updatable assignment. This is typically used to store (part of) the
+    state in a way that can be backtracked over. For example, after
+    binding a variable and then making some deductions the availabe choices
+    for another variable might have been reduced and we can use an UpdatableVar
+    to store that value as the computation moves forward but on backtracking
+    the old value will be restored.
+    """
+    def __init__(self, initialval:object):
         super().__init__()
         self.value = initialval
 
-    # not used as a normal variable - deref just returns self
-    # so that it's this variable that will be updated when binding
-    # this variable
     def deref(self):
+        """Unlike Var this is doesn't follow the dereference chain and so 
+        if the value is another variable we don't deref that variable. 
+        This means that the value (variable) will be replaced in a 
+        subsequent bind."""
         return self
 
     def __eq__(self, other):
@@ -411,7 +510,10 @@ class UpdatableVar(Var):
 # For use in ChoicePred below for generating choices then making (and testing)
 # those choices.
 class ChoiceHandler(Protocol):
-    def __init__(self, args):
+    """For use in ChoicePred for generating choices then making (and testing)
+    those choices.
+    """
+    def __init__(self, args:object):
         ...
 
     # returns True if there is another variable that can be chosen
@@ -419,34 +521,63 @@ class ChoiceHandler(Protocol):
     # False means that there are no more variables to be considered and
     # so the ChoicePred succeeds.
     def generate_choice(self) -> bool:
+        """Return True if there is another variable that can be chosen
+        and if so produce a generator of possible choices for that variable.
+        False means that there are no more variables to be considered and
+        in which case the ChoicePred succeeds.
+        """
         ...
 
     def make_choice(self) -> bool:
+        """Take the variable and generator produced by generate_choice
+        and try binding that variable to next of the generator. Return
+        True iff the choice is valid. 
+        NOTE: It is important that the implementation
+        of make_choice uses next on the generator in order to make
+        the choice so that retry_call in ChoicePred will terminate.
+        """
         ...
 
-# This predicate is like the following Prolog predicate
-#
-#  choice(State) :-
-#    pick_var(State, Var),
-#    !,
-#    generate_var_choices(State, Var, Choices),
-#    member(Var, Choices),
-#    check_choice(State),
-#    choice(State).
-#  choice(_).
-#
-#  The programmer is required to implement a choice handler where
-#  generate_choice should be like the combination of pick_var and
-#  generate_var_choices
-#  make_choice should be like the combination of member and check_choice
+
 class ChoicePred(Pred):
-    def __init__(self, handler_factory, handler_args, continuation_pred):
+    """
+    This predicate behaves like the following Prolog predicate
+
+    solve(State) :-
+        pick_var(State, Var),
+        !,
+        generate_var_choices(State, Var, Choices),
+        member(Var, Choices),
+        check_choice(State),
+        solve(State).
+    solve(_).
+    
+    The programmer is required to implement a choice handler where
+    generate_choice should be like the combination of pick_var and
+    generate_var_choices and make_choice should be like the combination 
+    of member and check_choice above.
+
+    Attributes:
+        handler_factory: the ChoiceHandler - in relation to the Prolog
+           code above it's for generating a new instance of the body on
+           each recursive call.
+        handler: like the generated instance of the Prolog body.
+        handler_args: the argument used by handle_factory to generate
+           a handler - probably a tuple encoding state.
+        continuation_pred: the predicate to call when this ChoicePred
+        completes with success - like the Prolog call
+        choices(State), continuation_pred(State)
+    """
+    
+    def __init__(self, handler_factory:ChoiceHandler,
+                 handler_args:object, continuation_pred:Pred):
         self.handler_factory = handler_factory
         self.handler = None
         self.handler_args = handler_args
         self.continuation_pred = continuation_pred
 
     def make_call(self) -> Status:
+        """Make the initial call on the predicte."""
         self.handler = self.handler_factory(self.handler_args)
         if self.handler.generate_choice():
             return self.retry_call()   # code reuse
@@ -455,6 +586,7 @@ class ChoicePred(Pred):
         return engine.push_and_call(self.continuation_pred)
 
     def retry_call(self) -> Status:
+        """Retry calling the predicate on backtracking."""
         try:
             if not self.handler.make_choice():
                 # the choice failed

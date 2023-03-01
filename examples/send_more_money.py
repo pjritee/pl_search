@@ -181,7 +181,9 @@ def solve():
         ]
 
     all_vars = disjoint + [C1,C2,C3]
-    result = pls.engine.execute(pls.ChoicePred(SmartPuzzleHandler, (constraint_sums, all_vars), SuccessPrint()))
+    result = pls.engine.execute(pls.ChoicePred(SmartPuzzleHandler,
+                                               (constraint_sums, all_vars),
+                                               SuccessPrint()))
 
     
 if __name__ == "__main__":
