@@ -176,10 +176,6 @@ class Fail(Pred):
     
 # Managing Environments
 
-# An environment consists of the predicate that is (to be) called
-# and a trail to be used on backtracking to reset variables that
-# are bound as part of making a call on the predicate
-
 class Environment:
     """An approximation of a Prolog environment for managing backtracking
     and retrying predicate calls. This is for internal use.
@@ -190,8 +186,7 @@ class Environment:
                variable in trail.
         pred: the called predicate that created this environment - on
               backtracking the retry_call method of pred is called
-              in order to find alternative solutions for pred
-    
+              in order to find alternative solutions for pred.   
     """
     def __init__(self, pred:Pred):
         self.trail = []
@@ -226,7 +221,7 @@ class EnvironmentStack:
     def __init__(self):
         """The stack is initialized with a sentinal so that if execution
         backtracks to before the initial predicate call the engine
-        exicution will terminate.
+        execution will terminate.
         """
         self.env_stack = [Environment(Exit())]
 
@@ -374,14 +369,13 @@ class Engine:
 
 engine = Engine()
 
-# a test to see if a term is a variable (after deref) -
-# like the Prolog var test
 def var(t):
     """Return True iff the argument is a variable after dereferencing."""
     return isinstance(t, Var) and isinstance(t.deref(), Var)
 
 # The only Prolog data structure is  Var - for all other cases we use
-# Python data structtures
+# Python data structures
+
 class Var:
     """Var is like a Prolog variable.
 
@@ -422,7 +416,7 @@ class Var:
 
     def deref(self) -> object:
         """Return self if the variable is unbound otherwise follow the
-        dereference chain and return the untimate value."""
+        dereference chain and return the ultimate value."""
         val = self
         while True:
             if val.value is None:
@@ -436,7 +430,6 @@ class Var:
         # check we never get here
         assert False
 
-    # bind an unbound variable
     def bind(self, val:object):
         """Bind the variable to the supplied value."""
         # check unbound
@@ -447,9 +440,9 @@ class Var:
         self.value = val
         return True
 
-    #  (for backtracking)
     def reset(self, oldvalue:object):
-        """Reset the value to the supplied value - called when untrailing."""
+        """Reset the value to the supplied value - called when untrailing
+        as part of backtracking."""
         self.value = oldvalue
 
     def __eq__(self, other:object):
@@ -507,8 +500,6 @@ class UpdatableVar(Var):
     def __repr__(self):
         return f'UpdatableVar({self.value})'
 
-# For use in ChoicePred below for generating choices then making (and testing)
-# those choices.
 class ChoiceHandler(Protocol):
     """For use in ChoicePred for generating choices then making (and testing)
     those choices.
@@ -516,10 +507,6 @@ class ChoiceHandler(Protocol):
     def __init__(self, args:object):
         ...
 
-    # returns True if there is another variable that can be chosen
-    # and if so produce a generator of possible choices for that variable
-    # False means that there are no more variables to be considered and
-    # so the ChoicePred succeeds.
     def generate_choice(self) -> bool:
         """Return True if there is another variable that can be chosen
         and if so produce a generator of possible choices for that variable.
