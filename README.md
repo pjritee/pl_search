@@ -8,6 +8,9 @@ The top-level docstring in pl_search/pl_search.py gives details of the module an
 
 ## Version History
 
+* 1.1
+  - Add Disjunction
+  - fix bug - not untrailing on execute success
 * 1.0
   - Major rewrite of Pred to simplify the programmers task.
   - The addition of predicate conjunction, looping and once

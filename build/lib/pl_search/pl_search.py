@@ -105,6 +105,15 @@ the same as once in Prolog - i.e. it removes alternative solutions from
 the supplied argument as follows.
 
 conjunct([Solve1(state), Once(Solve2(state)), Solve3(state)])
+
+The Disjunction predicate provides the equivalent of disjunction
+in Prolog e.g.
+
+pred1 ; pred2 ; pred3
+
+by using 
+
+Disjunction([pred1, pred2, pred3]).
 """
 
 from enum import Enum, auto
@@ -152,6 +161,7 @@ class Pred(ABC):
                 # the call succeeded - call the next predicate
                 return engine._push_and_call(self.continuation)
             # the call failed
+            #engine._pop_call()
             return Status.FAILURE
         except StopIteration:
             # The choices have been exhausted - no more solutions
@@ -337,7 +347,7 @@ class Engine:
         """This is used to completely clean up after the execution is complete.
         All variables are reset to their original values."""
         while self._env_stack:
-            self._env_stack.pop()
+            self._pop_call()
         self._env_stack = [(_exit,0)]
 
     def execute(self, pred:Pred) -> bool:
@@ -598,3 +608,25 @@ class Once(Pred):
         return True
 
         
+class Disjunction(Pred):
+    """The predicate that is the disjunction of a list of predicates.
+    Similar to Prolog's pred1 ; pred2 ; ...
+    """
+    
+    def __init__(self, pred_list):
+        self.pred_list = pred_list
+        
+    def initialize_call(self):
+        self.choice_iterator = iter(self.pred_list)
+
+    def _try_call(self) -> Status:
+        try:
+            pred = next(self.choice_iterator)
+            pred.continuation = self.continuation
+            return engine._push_and_call(pred)
+        except StopIteration:
+            engine._pop_call()
+            return Status.FAILURE
+            
+    def try_choice(self, _):
+        return True

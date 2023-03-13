@@ -112,6 +112,11 @@ v3 = pls.Var()
 # [1, 1, 2]
 # [2, 1, 1]
 # [2, 1, 2]
+# Disjunction Test
+# [1, 1]
+# [2, 1]
+# [a, 1]
+# [b, 1]
 
 def test():
     print("All solutions using FailPrint")
@@ -132,7 +137,7 @@ def test():
 
     print("Loop Test")
     body_factory = LoopFactory([v1,v2])
-    pred = pls.conjunct([pls.Loop(body_factory),
+    pred = pls.conjunct([Print([v1,v2]), pls.Loop(body_factory),
                          Print([v1,v2]),
                          pls.fail])
     pls.engine.execute(pred)
@@ -147,6 +152,13 @@ def test():
                                      pls.Once(Member(v2, [1,2])),
                                      Member(v3, [1,2]),
                                      FailPrint([v1,v2,v3])]))
+
+    print("Disjunction Test")
+    pls.engine.execute(pls.conjunct([pls.Disjunction([Member(v1, [1,2]),
+                                                      Member(v1, ['a', 'b'])]),
+                                     pls.Once(Member(v2, [1,2])),
+                                     Print([v1,v2]),
+                                     pls.fail]))
     
 if __name__ == "__main__":
     test()

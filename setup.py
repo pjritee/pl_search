@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='pl_search',
-    version='1.0',
+    version='1.1',
     packages=['pl_search'],
     license='MIT',
     description='A module for searching and constraint programming using Prolog ideas.',
