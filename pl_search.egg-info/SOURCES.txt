@@ -7,3 +7,4 @@ pl_search.egg-info/PKG-INFO
 pl_search.egg-info/SOURCES.txt
 pl_search.egg-info/dependency_links.txt
 pl_search.egg-info/top_level.txt
+test/test1.py

@@ -35,7 +35,8 @@ of Pred for carrying out the search and, typically, a subclass of
 Success or Fail for printing one solution or all solutions respectively.
 
 An example of using this module is given in examples/send_more_money.py
-that covers a significant portion of the use of the module.
+that covers a significant portion of the use of the module. Further 
+simple examples can be found in test/test1.py.
 
 Below is a description of how some approaches for solving search problems
 in Prolog are translated into Python using this module.
@@ -50,70 +51,66 @@ and print a solution.
 
 Using this module the programmer would need to set up a Python equivalent of
 State using Var objects for the unknowns and then defining a Pred class
-where make_call initialises and starts the search and where retry_call
-deals with backtracking and trying alternatives.
+where initialize_call initialises and where try_choice defines how to process
+a given choice.
+
+The management of calling predicates and backtracking is done in Engine.
 
 The programmer will typically inherit from the Success predicate that will
 print out the answer as part of it's make_call.
 
 The equivalent of calling the query might be something like
 
-engine.execute(python_pred, python_state,  python_print_success(python_state))
+engine.execute(conjunct([Solve(python_state),  Print(python_state)])
 
 In Prolog, if we want all solutions, we would write:
 
     solve(State), print_answer(State), fail.
 
-In this case the programmer would inherit from the Fail predicate and we
-would get something like
+In this case the programmer could write
 
-engine.execute(python_pred, python_state,  python_print_fail(python_state))
+engine.execute(conjunct([Solve(python_state),  Print(python_state), fail])
 
-The second approach is to follow a standard Prolog pattern as described
-later in ChoicePred where the Prolog implementation of solve follows the
-pattern
+where fail is an instance of the Fail predicate and is like the fail 
+predicate in Prolog.
+
+The second approach is to follow a standard Prolog pattern
 
     solve(State) :-
-        pick_var(State, Var),
+        loop_continues(State),
         !,
-        generate_var_choices(State, Var, Choices),
-        member(Var, Choices),
-        check_choice(State),
+        body_call(State),
         solve(State).
     solve(_).
 
-ChoicePred follows this pattern, simplifying the problem for the programmer.
-The programmer now only needs to answer the following questions to create
-an implementation.
+In this case the programmer can use the Loop predicate that takes a
+LoopBodyFactory. The programmer inherits from LoopBodyFactory and defines 
+the methods loop_continues which succeeds if the loop should continue and
+make_body_pred which returns an instance of the predicate to be called
+in the body.
+ 
+The send_more_money uses this approach.
 
-1. How do I pick a variable to choose possible values for?
-2. What are the possible values for this variable?
-3. How do I check that a given choice is valid?
-4. (optionally) Are there any deductions that can be made given the choice?
+Sometimes, in Prolog, we might break down the search into parts, for example
 
-To program answers to these questions the programmer can define a ChoiceHandler
-where generate_choice answers 1. and 2. and make_choice (after binding the
-variable to the choice) answers 3. and 4.
+solve_part1(State), solve_part2(State), solve_part2(State
 
-The send_more_money uses this approach where solving the puzzle is done as 
-follows (where SmartPuzzleHandler implements the answers the above questions).
+This can be done by creating a conjunct of programmer defined predicate:
 
-engine.execute(ChoicePred(SmartPuzzleHandler, 
-               (constraint_sums, all_vars), 
-               SuccessPrint()))
+conjunct([Solve1(state), Solve2(state), Solve3(state)])
 
-Sometimes, in Prolog, we might break down the search into parts:
+In some cases the programmer might only need the first solution of, say,
+Solve2(state). In this case the programmer can use the Once predicate which is
+the same as once in Prolog - i.e. it removes alternative solutions from
+the supplied argument as follows.
 
-solve_part1(State), solve_part2(State), .....
-
-In this case the equivalent of solve_part2 would be a Pred with its own
-continuation and would be the continuation of the equivalent of solve_part1.
-
+conjunct([Solve1(state), Once(Solve2(state)), Solve3(state)])
 """
 
 from enum import Enum, auto
 from typing import Protocol
 from typing import Generator
+from abc import ABC, abstractmethod
 
 class Status(Enum):
     """ Engine execution status """
@@ -122,156 +119,130 @@ class Status(Enum):
     SUCCESS = auto()
 
 
-class Pred(Protocol):
-    """ Approximates Prolog predicates."""
-    def make_call(self) -> Status:
-        """The definition for the initial call on the predicate."""
-        ...
+class Pred(ABC):
+    """ Approximates Prolog predicates. The programmer needs to define
+    self.choice_iterator before the predicate object is 'called'. This
+    iterator is used to drive backtracking.
+    """
 
-    def retry_call(self) -> Status:
-        """The definition for retrying the call on backtracking."""
-        ...
+    @property
+    def continuation(self):
+        """ The predicate to be called if (and when) this predicate succeeds.
+        For internal use. """
+        if hasattr(self, '_continuation'):
+            return self._continuation
+        return None
+    
+    @continuation.setter
+    def continuation(self, cont):
+        if self.continuation is None:
+            self._continuation = cont
+        else:
+            self._continuation = cont
+            
+    def _call_pred(self) -> Status:
+        """ Call the predicate. For internal use. """
+        self.initialize_call()
+        return self._try_call()
 
+    def _try_call(self) -> Status:
+        """ Try the alternative choices. For internal use. """
+        try:
+            if self.try_choice(next(self.choice_iterator)):
+                # the call succeeded - call the next predicate
+                return engine._push_and_call(self.continuation)
+            # the call failed
+            return Status.FAILURE
+        except StopIteration:
+            # The choices have been exhausted - no more solutions
+            engine._pop_call()
+            return Status.FAILURE
+
+    @abstractmethod
+    def initialize_call(self):
+        """This initializes the predicate - for example setting a
+        variable and setting the choice_iterator so that, on backtracking,
+        the variable can be bound to each choice in the iterator.
+        Setting choice_iterator is required here.
+        """
+        pass
+
+    @abstractmethod
+    def try_choice(self, choice)-> bool:
+        """choice is the next item of the choice_iterator and this should
+        return True iff this is a valid choice for whatever valid means
+        in the application.
+        """
+        pass
+
+    def __repr__(self):
+        return f'Pred : {self.continuation}'
 
 class Exit(Pred):
     """A special predicate to exit engine execution - for internal use."""
-    def make_call(self) -> Status:
-        return Status.EXIT
 
-    def retry_call(self) -> Status:
-        # never gets here but some defn is needed
-        return Status.EXIT
+    def initialize_call(self):
+        pass
 
+    def try_choice(self, _) -> bool:
+        return True
+
+    def _try_call(self) -> Status:
+        return Status.EXIT
+    
     def __repr__(self):
         return 'Exit Predicate'
 
 
     
-# For exiting the engine with success
-class Success(Pred):
-    """Similar to 'true' in Prolog - typically used as a continuation."""
-    def make_call(self) -> Status:
-        return Status.SUCCESS
-
-    def retry_call(self) -> Status:
-        # never gets here but some defn is needed
-        return Status.SUCCESS
-
-    def __repr__(self):
-        return 'Success Predicate'
-
 class Fail(Pred):
-    """Similar to 'fail' in Prolog - typically used as a continuation."""
-    def make_call(self) -> Status:
-        return Status.FAILURE
+    """Similar to 'fail' in Prolog - typically used as a continuation
+    to drive backtracking."""
 
-    def retry_call(self) -> Status:
-        # never gets here but some defn is needed
-        return Status.FAILURE
+    def initialize_call(self):
+        # making the iterator empty causes this predicate to fail
+        # when called
+        self.choice_iterator = iter([])
+
+    def try_choice(self, _) -> bool:
+        return False
 
     def __repr__(self):
         return 'Fail Predicate'
 
-
+# We only need one instance of Fail and Exit
+fail = Fail()
+_exit = Exit()
     
-# Managing Environments
 
-class Environment:
-    """An approximation of a Prolog environment for managing backtracking
-    and retrying predicate calls. This is for internal use.
-
-    Attributes:
-        trail: a list of (variable, oldvalue) pairs - on backtracking the
-               current value of variable is reset to oldvalue for each
-               variable in trail.
-        pred: the called predicate that created this environment - on
-              backtracking the retry_call method of pred is called
-              in order to find alternative solutions for pred.   
-    """
-    def __init__(self, pred:Pred):
-        self.trail = []
-        self.pred = pred
-
-    def __repr__(self):
-        # for debugging
-        return f'Environment({self.pred})'
-
-    def trail_var(self, pvar:"Var"):
-        """To be called BEFORE binding the variable so that
-        pvar.value is the old value of the variable.
-        """
-        self.trail.append((pvar, pvar.value))
-
-    def backtrack(self):
-        """Backtrack over (reset) all the var bindings in the trail."""
-        while self.trail:
-            v, oldvalue = self.trail.pop()
-            v.reset(oldvalue)
-
-    def __str__(self):
-        return str(self.pred)
-
-class EnvironmentStack:
-    """An approximation of a Prolog environment stack. It is a list of
-    Environments - one for each predicate in the call stack. The stack is
-    created by making a predicate call and then calling it's continuation
-    predicate (and possibly the continuations continuation etc.).
-    This is for internal use.
-    """
-    def __init__(self):
-        """The stack is initialized with a sentinal so that if execution
-        backtracks to before the initial predicate call the engine
-        execution will terminate.
-        """
-        self.env_stack = [Environment(Exit())]
-
-    def trail(self, v:"Var"):
-        """Trail v in the current (top) environment. """
-        self.env_stack[-1].trail_var(v)
-
-    def backtrack(self):
-        """Backtrack in the current (top) environment. """
-        self.env_stack[-1].backtrack()
-
-    def push(self, pred:Pred):
-        """Add a new environment for pred."""
-        self.env_stack.append(Environment(pred))
-
-    def pop(self) -> Pred:
-        """Remove the current environment, bactrack in that environment
-        and return that environment so that the pred can be retried.
-        """
-        
-        env = self.env_stack.pop()
-        env.backtrack()
-        return env.pred
-    
-    def top(self) -> Environment:
-        """Return the current (top) environment."""
-        return self.env_stack[-1]
-
-    def clear(self):
-        """Clear the environment stack - i.e. backtrack to before
-        the first pred call.
-        """
-        while self.env_stack:
-            self.pop()
-        self.env_stack = [Environment(Exit())]
-
-    def __repr__(self):
-        return repr(self.env_stack)
-
-# The engine is responsible for calling the required predicates and managing
-# backtracking.
 class Engine:
-    """Engine is responsible for managing the execution (calling) of the
+    """Engine is responsible for managing the execution of (calling) the
     supplied predicate (and it's continuation). This includes managing
     the environment stack, dereferencing terms, unifying terms,
     backtracking and retrying predicates.
     """
     def __init__(self):
-        self.env_stack = EnvironmentStack()
+        """
+        Attributes:
+           _env_stack: a list of pairs of predicate objects together with
+                the index into the trail that was one past the top of the 
+                trail_stack when the predicate was called.
 
+            _trail_stack: a list of variable, old_value pairs so that on
+                backtracking the variable's value can be reset to it's old
+                value.
+        """
+        # (_exit, 0) is used as a sentinal that deals with backtracking
+        # past the initial predicate call
+        self._env_stack = [(_exit, 0)]
+        self._trail_stack = []
+
+    def _trail(self, v:"Var"):
+        """To be called BEFORE binding the variable so that
+        v.value is the old value of the variable.
+        """
+        self._trail_stack.append((v, v.value))
+        
     def dereference(self, t1:object) -> object:
         """Return the dereference of the argument."""
         if isinstance(t1, Var):
@@ -298,11 +269,11 @@ class Engine:
             return True
         if isinstance(t1, Var):
             # bind and trail
-            self.env_stack.trail(t1)
+            self._trail(t1)
             return t1.bind(t2)
         if isinstance(t2, Var):
             # bind and trail
-            self.env_stack.trail(t2)
+            self._trail(t2)
             return t2.bind(t1)
         if isinstance(t1, list):
             # seems useful to unify Python lists as part of unify -
@@ -321,46 +292,71 @@ class Engine:
             return t2.unify_with(t1)
         return False
 
-    def backtrack(self):
-        """Lifting backtrack from the environment stack."""
-        self.env_stack.backtrack()
+    def _backtrack(self):
+        """Backtrack (reset all varible bindings) as a consequence of calling
+        the 'current' predicate"""
+        _, trail_index = self._env_stack[-1]
+        while len(self._trail_stack) > trail_index:
+            v, oldvalue = self._trail_stack.pop()
+            v.reset(oldvalue)
 
-    def push(self, pred:Pred):
+    def _push(self, pred:Pred):
         """Add a new predicate to the environment stack."""
-        self.env_stack.push(pred)
+        self._env_stack.append((pred, len(self._trail_stack)))
 
-    def push_and_call(self, pred:Pred) -> Status:
+    def _push_and_call(self, pred:Pred) -> Status:
         """Add a new predicate to the environment stack and
         call that predicate.
         """
-        self.env_stack.push(pred)
-        return pred.make_call()
+        if pred is None:
+            return Status.SUCCESS
+        self._push(pred)
+        return pred._call_pred()
 
-    def pop_call(self) -> Pred:
-        """Lifting of pop for the environment stack."""
-        return self.env_stack.pop()
+    def _pop_call(self) -> Pred:
+        """Backtrack and then pop the top of env_stack - 
+        for 'failing over the current predicate'"""
+        self._backtrack()
+        return self._env_stack.pop()
 
-    def current_call(self) -> Pred:
+    def _pop_to_once_(self):
+        """ This is to support Once by removing all calls at the top of 
+        env_stack back to (and including) the previous Once entry. Note
+        the backtracking is NOT done.
+        """
+        pred,_ = self._env_stack.pop()
+        while not isinstance(pred, Once):
+            pred,_ = self._env_stack.pop()
+
+            
+    def _current_call(self) -> Pred:
         """Return the current (top) call on the environment stack."""
-        return self.env_stack.top().pred
+        return self._env_stack[-1][0]
+
+    def _clear_env_stack(self):
+        """This is used to completely clean up after the execution is complete.
+        All variables are reset to their original values."""
+        while self._env_stack:
+            self._env_stack.pop()
+        self._env_stack = [(_exit,0)]
 
     def execute(self, pred:Pred) -> bool:
         """Execute (call) the supplied predicate returning True
         iff the call succeeds.
         """
-        status = self.push_and_call(pred)
+        status = self._push_and_call(pred)
 
         while status == Status.FAILURE:
             # backtrack and retry the current call
-            self.backtrack()
-            pred_call = self.current_call()
-            status = pred_call.retry_call()
+            self._backtrack()
+            pred_call = self._current_call()
+            status = pred_call._try_call()
         # Note that the following clears the environment stack
         # including backtracking over all variable bindings
         # and so all binding created by a successful search will be lost.
         # This means the programmer will need to output any relevant
         # information from a successful search in the continuation. 
-        self.env_stack.clear()
+        self._clear_env_stack()
         return status == Status.SUCCESS
 
 #### !!! NOTE !!!
@@ -500,89 +496,105 @@ class UpdatableVar(Var):
     def __repr__(self):
         return f'UpdatableVar({self.value})'
 
-class ChoiceHandler(Protocol):
-    """For use in ChoicePred for generating choices then making (and testing)
-    those choices.
+
+def conjunct(predlst:list[Pred]) -> Pred:
+    """Return a single Pred created by chaining their continuations - the
+    same as a sequence of conjunctions in Prolog.
     """
-    def __init__(self, args:object):
-        ...
+    for p1, p2 in zip(predlst[:-1], predlst[1:]):
+        p1.continuation = p2
+    return predlst[0]
 
-    def generate_choice(self) -> bool:
-        """Return True if there is another variable that can be chosen
-        and if so produce a generator of possible choices for that variable.
-        False means that there are no more variables to be considered and
-        in which case the ChoicePred succeeds.
-        """
-        ...
-
-    def make_choice(self) -> bool:
-        """Take the variable and generator produced by generate_choice
-        and try binding that variable to next of the generator. Return
-        True iff the choice is valid. 
-        NOTE: It is important that the implementation
-        of make_choice uses next on the generator in order to make
-        the choice so that retry_call in ChoicePred will terminate.
-        """
-        ...
-
-
-class ChoicePred(Pred):
-    """
-    This predicate behaves like the following Prolog predicate
-
-    solve(State) :-
-        pick_var(State, Var),
-        !,
-        generate_var_choices(State, Var, Choices),
-        member(Var, Choices),
-        check_choice(State),
-        solve(State).
-    solve(_).
+class LoopBodyFactory(Protocol):
+    """A factory for creating instances of a Pred used in the Loop predicate."""
     
-    The programmer is required to implement a choice handler where
-    generate_choice should be like the combination of pick_var and
-    generate_var_choices and make_choice should be like the combination 
-    of member and check_choice above.
+    def loop_continues(self) -> bool:
+        """Returns True iff the Loop predicate should continue."""
+        ...
 
-    Attributes:
-        handler_factory: the ChoiceHandler - in relation to the Prolog
-           code above it's for generating a new instance of the body on
-           each recursive call.
-        handler: like the generated instance of the Prolog body.
-        handler_args: the argument used by handle_factory to generate
-           a handler - probably a tuple encoding state.
-        continuation_pred: the predicate to call when this ChoicePred
-        completes with success - like the Prolog call
-        choices(State), continuation_pred(State)
+    def make_body_pred(self) -> Pred:
+        """Create an instance of the predicate to be called in the loop body."""
+        ...
+
+class Loop(Pred):
+    """Creating a predicate that is the equivalent of a Prolog predicate
+    like
+        loop(State) :-
+            loop_continues(State), !,
+            body_call(State),
+            loop(State).
+        loop(_).
     """
-    
-    def __init__(self, handler_factory:ChoiceHandler,
-                 handler_args:object, continuation_pred:Pred):
-        self.handler_factory = handler_factory
-        self.handler = None
-        self.handler_args = handler_args
-        self.continuation_pred = continuation_pred
+    def __init__(self, body_factory:LoopBodyFactory):
+        self.body_factory = body_factory
 
-    def make_call(self) -> Status:
-        """Make the initial call on the predicte."""
-        self.handler = self.handler_factory(self.handler_args)
-        if self.handler.generate_choice():
-            return self.retry_call()   # code reuse
-        # we have succeeded and there are no more variables to choose
-        # so call the next predicate
-        return engine.push_and_call(self.continuation_pred)
+    def initialize_call(self):
+        # deterministic predicate
+        self.choice_iterator = iter([1])
 
-    def retry_call(self) -> Status:
-        """Retry calling the predicate on backtracking."""
+    def _try_call(self) -> Status:
         try:
-            if not self.handler.make_choice():
-                # the choice failed
-                return Status.FAILURE
-            # like the recursive call on the Prolog choice predicate
-            return engine.push_and_call(ChoicePred(self.handler_factory,
-                                                   self.handler_args,
-                                                   self.continuation_pred))
+            next(self.choice_iterator)
+            if self.body_factory.loop_continues():
+                pred = self.body_factory.make_body_pred()
+                pred.continuation = Loop(self.body_factory)
+                pred.continuation.continuation = self.continuation
+                return engine._push_and_call(pred)
+            return engine._push_and_call(self.continuation)
         except StopIteration:
-            # run out of choices so fail
-            engine.pop_call()
+            engine._pop_call()
             return Status.FAILURE
+            
+    def try_choice(self, _):
+        return True
+     
+
+    def __repr__(self):
+        return f'Loop(self.body_factory) : {self.continuation}'
+
+class _OnceEnd(Pred):
+    """For internal use only. A dummy predicate that when called pops
+    the environment (call stack) back to just before the  closest
+    Once entry."""
+    def initialize_call(self):
+        self.choice_iterator = iter([1])
+
+    def _try_call(self) -> Status:
+        try:
+            next(self.choice_iterator)
+            engine._pop_to_once_()
+            return engine._push_and_call(self.continuation)
+        except StopIteration:
+            engine._pop_call()
+            return Status.FAILURE
+            
+    def try_choice(self, _):
+        return True
+    
+class Once(Pred):
+    """The Python implementation of the Prolog once meta-predicate
+    that removes alternatives from the given predicate.
+    """
+    
+    def __init__(self, pred):
+        """ pred is the predicate that Once applies to."""
+        self._pred = pred
+
+    def initialize_call(self):
+        # deterministic predicate
+        self.choice_iterator = iter([1])
+
+    def _try_call(self) -> Status:
+        try:
+            next(self.choice_iterator)
+            self._pred.continuation = _OnceEnd()
+            self._pred.continuation.continuation = self.continuation
+            return engine._push_and_call(self._pred)
+        except StopIteration:
+            engine._pop_call()
+            return Status.FAILURE
+            
+    def try_choice(self, _):
+        return True
+
+        

@@ -12,16 +12,18 @@ import pl_search as pls
 # ------
 #  MONEY
 
-# One strategy is to use PuzzleHandler below. In this approach
+# One strategy is to use PuzzlePred below. In this approach
 # we simply pick a variable, make a choice, test the choice and
 # repeat until we find a solution.
-# The other strategy is to use SmartPuzzleHandler and that is
+# The other strategy is to use SmartPuzzlePred and that is
 # perhaps more typical for constraint solving. After a variable is chosen
 # and a choice made and checked we see what can be deduced (i.e. are there
 # any other variables whose values are forced).
 # In the second approach we are assuming that the time taken to do deductions
 # is smaller than the time taken to make choices and backtrack over failed
 # choices for those variables.
+# For this program the Smart approach seems to be about 40 to 50 times faster
+# than the simpler approach.
 
 DIGITS0 = {0,1,2,3,4,5,6,7,8,9}
 DIGITS = {1,2,3,4,5,6,7,8,9}
@@ -31,7 +33,10 @@ class PuzzleVar(pls.Var):
     def __init__(self, choices):
         super().__init__()
         self.choices = choices
+        self.disjoints = []
 
+    def set_disjoints(self, disj):
+        self.disjoints = disj
     # Allow checking before binding
     # Note that the check is not needed when using PuzzleHander
     # as get_choices returns only valid choices
@@ -45,7 +50,7 @@ class PuzzleVar(pls.Var):
     # should fail and if the set was a singleton then we could bind both
     # variables to that value (both deductions).
     def bind(self, val):
-        if val not in self.choices:
+        if val not in self.choices or val in self.disjoints:
                 return False
         super().bind(val)
         return True
@@ -53,59 +58,61 @@ class PuzzleVar(pls.Var):
     # As variables get bound to digits those digits are no longer
     # possible choices for other variables.
     def get_choices(self):
-        known_disjoints = {pls.engine.dereference(n) for n in disjoint
+        known_disjoints = {pls.engine.dereference(n) for n in self.disjoints
                            if not pls.var(n)}
         return iter(self.choices.difference(known_disjoints))
 
-class PuzzleHandler(pls.ChoiceHandler):
-    def __init__(self, args):
-        # Because of the way ChoiceHandlers are used we take the simple
-        # approach and say that we pass only one argument to the constructor.
-        # This argument is typically a tuple containing the required
-        # state information.
-        self.constraint_sums, self.all_vars = args
-        # the following is probably not needed
-        self.best_var = None    
-        self.choice_iter = iter([])
-        
-    def generate_choice(self) :
-        v = self.get_best_var()
-        if v is None:
-            # there are no more variables and so all variables have been
-            # instantiated giving a solution.
-            return False
+# A predicate for trying alternative choices for an unbound variable.
+class PuzzlePred(pls.Pred):
+    def __init__(self, constraint_sums, all_vars):
+        self.constraint_sums = constraint_sums
+        self.all_vars = all_vars
+
+    # This method is required and is used to initialize the predicate call
+    # In this case we pick an unbound variable and determine the possible
+    # choices for this variable. The attribute choice_iterator is used
+    # by the system to backtrack over the possible choices and this attribute
+    # needs to be given a value in this method for nondeterministic predicates.
+    def initialize_call(self):
+        v = get_best_var(self.all_vars)
         self.best_var = v
-        self.choice_iter = v.get_choices()
+        self.choice_iterator = v.get_choices()
         return True
 
-    def make_choice(self):
-        choice = next(self.choice_iter)
+    # This method is also required and is called immediately after
+    # initialize_call and each time the system backtracks to try an alternative
+    # The argument to the method is the current choice pruduced by
+    # next(self.choice_iterator). It return True iff the choice is a valid one.
+    def try_choice(self, choice) -> bool:
         # As in Prolog implementations it's more typical to use unify
         # rather than bind directly as it's more general.
         return pls.engine.unify(self.best_var, choice) and self.test_choice()
    
     def test_choice(self):
         # Check if all the ground columns in the sum produce the correct result.
-        for left, right in self.constraint_sums:            
+        for left, right in self.constraint_sums:
             if all(not pls.var(x) for x in left) and \
                all(not pls.var(x) for x in right):
-                 if sum(x.deref() for x in left) != \
+                if sum(x.deref() for x in left) != \
                     right[0].deref() + 10*right[1].deref():
                      return False
         return True
 
-    def get_best_var(self):
-        # Simply find the next available variable.
-        # We could have been more clever and, for example, picked the
-        # variable with the smallest number of choices but that takes time
-        # so it's a trade off.
-        for v in self.all_vars:
-            if pls.var(v):
-                return v
-        return None
+def get_best_var(all_vars):
+    # Simply find the next available variable.
+    # We could have been more clever and, for example, picked the
+    # variable with the smallest number of choices but that takes time
+    # so it's a trade off.
+    for v in all_vars:
+        if pls.var(v):
+            return v
+    return None
 
-# Here we override test_choice to allow deductions.
-class SmartPuzzleHandler(PuzzleHandler):
+def more_vars(all_vars):
+    return any(pls.var(v) for v in all_vars)
+
+# SmartPuzzlePred uses deductions as part of testing the choice.
+class SmartPuzzlePred(PuzzlePred):
     def test_choice(self):
         progress = True
         # keep doing deductions until none are possible
@@ -139,21 +146,39 @@ class SmartPuzzleHandler(PuzzleHandler):
                         return False
         return True
 
-# The continuation predicate prints out the answer and causes the
-# computation (search) to complete reseting the engine to it's initial
-# state.
-# If we wanted all solutions we could have inherited fromm pls.Failure
-# and instead returned pls.Status.FAILURE - this would have caused backtracking
-# after each solution is printed.
-class SuccessPrint(pls.Success):
-    def make_call(self):
+# Used in the Loop predicate to generate a predicate
+# to backtrack over choices for a given variable.
+class PuzzleFactory(pls.LoopBodyFactory):
+
+    def __init__(self, pred, constraint_sums, all_vars):
+        self.pred = pred
+        self.constraint_sums =  constraint_sums
+        self.all_vars = all_vars
+
+    # This method is required and is used to determine if the loop
+    # predicate should continue.
+    def loop_continues(self) -> bool:
+        return more_vars(self.all_vars)
+
+    # This method is required and is used to create a predicate
+    # to be called as part of the loop body.
+    def make_body_pred(self) -> pls.Pred:
+        return self.pred(self.constraint_sums, self.all_vars)
+
+# A predicate to print out the solution
+class SuccessPrint(pls.Pred):
+    def initialize_call(self):
         print(f'   {S}{E}{N}{D}')
         print(f' + {M}{O}{R}{E}')
         print(' ------')
         print(f'  {M}{O}{N}{E}{Y}')
-        return pls.Status.SUCCESS
+        # the predicate is deterministic
+        self.choice_iterator = iter([1])
 
-# Make the variables global so they can be printed inside SuccessPrint
+    def try_choice(self, _):
+        return True
+
+# Make the variables global so they can be easily printed inside SuccessPrint
 S = PuzzleVar(DIGITS)
 E = PuzzleVar(DIGITS0)
 N = PuzzleVar(DIGITS0)
@@ -163,14 +188,18 @@ O = PuzzleVar(DIGITS0)
 R = PuzzleVar(DIGITS0)
 Y = PuzzleVar(DIGITS0)
 
-# Make the disjoint set global so it can be accessed in PuzzleVar.get_choices
-disjoint = [D,E,N,R,S,M,O,Y]
 
 def solve():
+
+    disjoint = [D,E,N,R,S,M,O,Y]
+
+    for v in disjoint:
+        v.set_disjoints(disjoint)
+    
     C1 = PuzzleVar(CARRY)
     C2 = PuzzleVar(CARRY)
     C3 = PuzzleVar(CARRY) 
-
+    
     # Encoding the problem in terms of each column in the sum
     # (including each carry)
     constraint_sums = [
@@ -181,9 +210,13 @@ def solve():
         ]
 
     all_vars = disjoint + [C1,C2,C3]
-    result = pls.engine.execute(pls.ChoicePred(SmartPuzzleHandler,
-                                               (constraint_sums, all_vars),
-                                               SuccessPrint()))
+
+    # Change commented line below to try alternative strategy
+    factory = PuzzleFactory(SmartPuzzlePred, constraint_sums, all_vars)
+    #factory = PuzzleFactory(PuzzlePred, constraint_sums, all_vars)
+    
+    pred = pls.conjunct([pls.Loop(factory), SuccessPrint()])
+    result = pls.engine.execute(pred)
 
     
 if __name__ == "__main__":
