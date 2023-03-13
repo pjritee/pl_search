@@ -4,7 +4,7 @@ There are several Python constraint solvers but it appears that they are tailore
 
 Being more generic means that the programmer will have more work to do that in other constraint solvers.
 
-The top-level docstring in pl_search/pl_search.py gives details of the module and examples/send_more_money.py is an example of the use of this module.
+The top-level docstring in pl_search/pl_search.py gives details of the module and examples/send_more_money.py is an example of the use of this module. Further test/test1.py has a collection of various simple searches.
 
 ## Version History
 
@@ -13,3 +13,4 @@ The top-level docstring in pl_search/pl_search.py gives details of the module an
   - The addition of predicate conjunction, looping and once
   - re-factoring of Engine.
 * 0.1
+  - Initial release.
