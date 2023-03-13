@@ -137,7 +137,7 @@ def test():
 
     print("Loop Test")
     body_factory = LoopFactory([v1,v2])
-    pred = pls.conjunct([Print([v1,v2]), pls.Loop(body_factory),
+    pred = pls.conjunct([pls.Loop(body_factory),
                          Print([v1,v2]),
                          pls.fail])
     pls.engine.execute(pred)
