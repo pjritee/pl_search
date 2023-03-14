@@ -8,14 +8,17 @@ The top-level docstring in pl_search/pl_search.py gives details of the module an
 
 ## Version History
 
+* 1.3
+  - Add DetPred (deterministic predicate)
+  - Update top-level docstring
 * 1.2
-  - improve efficiency of Loop
+  - Improve efficiency of Loop
 * 1.1
   - Add Disjunction
-  - fix bug - not untrailing on execute success
+  - Fix bug - not untrailing on execute success
 * 1.0
   - Major rewrite of Pred to simplify the programmers task.
   - The addition of predicate conjunction, looping and once
-  - re-factoring of Engine.
+  - Re-factoring of Engine.
 * 0.1
   - Initial release.

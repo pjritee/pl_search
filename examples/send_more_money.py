@@ -166,14 +166,12 @@ class PuzzleFactory(pls.LoopBodyFactory):
         return self.pred(self.constraint_sums, self.all_vars)
 
 # A predicate to print out the solution
-class SuccessPrint(pls.Pred):
+class SuccessPrint(pls.DetPred):
     def initialize_call(self):
         print(f'   {S}{E}{N}{D}')
         print(f' + {M}{O}{R}{E}')
         print(' ------')
         print(f'  {M}{O}{N}{E}{Y}')
-        # the predicate is deterministic
-        self.choice_iterator = iter([1])
 
     def try_choice(self, _):
         return True

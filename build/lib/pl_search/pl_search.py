@@ -30,9 +30,12 @@ implementation of Prolog - it simply uses ideas from Prolog like variables
 and backtrack search implemented using a simplified trail and 
 environment stack.
 
-For a given application the programmer typically defines a subclass
-of Pred for carrying out the search and, typically, a subclass of
-Success or Fail for printing one solution or all solutions respectively.
+For a given application the programmer typically defines one or more 
+subclasses of Pred (or DetPred) for carrying out the search. The search
+is then executed by calling engine.execute on a conjunction of predicates
+typically ending in a predicate that prints a solution. If all solutions
+are required then the predicate that prints a solution can be followed by the
+builtin predicate 'fail' that triggers backtracking.
 
 An example of using this module is given in examples/send_more_money.py
 that covers a significant portion of the use of the module. Further 
@@ -187,6 +190,24 @@ class Pred(ABC):
 
     def __repr__(self):
         return f'Pred : {self.continuation}'
+
+class DetPred(Pred):
+    """ A deterministic predicate (0 or 1 solutions). 
+    As any predicate that inherits from DetPred is deterministic the 
+    programmer is not required to define choice_iterator. 
+    Also, as None is passed into try_choice then the
+    programmer should ignore the argument when implementing try_choice.
+    """
+
+    def _try_call(self) -> Status:
+        # remove this pred from stack as it's no longer required
+        engine._env_stack.pop()
+        if self.try_choice(None):
+            return engine._push_and_call(self.continuation)
+        return Status.FAILURE
+
+    def try_choice(self, _):
+        return True
 
 class Exit(Pred):
     """A special predicate to exit engine execution - for internal use."""
@@ -558,26 +579,22 @@ class Loop(Pred):
     def __repr__(self):
         return f'Loop(self.body_factory) : {self.continuation}'
 
-class _OnceEnd(Pred):
+class _OnceEnd(DetPred):
     """For internal use only. A dummy predicate that when called pops
     the environment (call stack) back to just before the  closest
     Once entry."""
-    def initialize_call(self):
-        self.choice_iterator = iter([1])
 
+    def initialize_call(self):
+        pass
+    
     def _try_call(self) -> Status:
-        try:
-            next(self.choice_iterator)
-            engine._pop_to_once_()
-            return engine._push_and_call(self.continuation)
-        except StopIteration:
-            engine._pop_call()
-            return Status.FAILURE
+        engine._pop_to_once_()
+        return engine._push_and_call(self.continuation)
             
     def try_choice(self, _):
         return True
     
-class Once(Pred):
+class Once(DetPred):
     """The Python implementation of the Prolog once meta-predicate
     that removes alternatives from the given predicate.
     """
@@ -587,18 +604,12 @@ class Once(Pred):
         self._pred = pred
 
     def initialize_call(self):
-        # deterministic predicate
-        self.choice_iterator = iter([1])
-
+        pass
+    
     def _try_call(self) -> Status:
-        try:
-            next(self.choice_iterator)
-            self._pred.continuation = _OnceEnd()
-            self._pred.continuation.continuation = self.continuation
-            return engine._push_and_call(self._pred)
-        except StopIteration:
-            engine._pop_call()
-            return Status.FAILURE
+        self._pred.continuation = _OnceEnd()
+        self._pred.continuation.continuation = self.continuation
+        return engine._push_and_call(self._pred)
             
     def try_choice(self, _):
         return True

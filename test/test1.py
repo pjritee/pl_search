@@ -32,14 +32,12 @@ class Member(pls.Pred):
         return pls.engine.unify(self.v, c)
     
 
-class Print(pls.Pred):
+class Print(pls.DetPred):
     def __init__(self, varlst):
         self.varlst = varlst
 
     def initialize_call(self):
         print(f'{self.varlst}')
-        # the predicate is deterministic
-        self.choice_iterator = iter([1])
 
     def try_choice(self, _):
         return True
@@ -117,6 +115,23 @@ v3 = pls.Var()
 # [2, 1]
 # [a, 1]
 # [b, 1]
+# Deterministic Predicate Test
+# ['v1', 1]
+# ['v2', 1]
+# ['v3', a]
+# ['v3', b]
+# ['v1', 1]
+# ['v2', 2]
+# ['v3', a]
+# ['v3', b]
+# ['v1', 2]
+# ['v2', 1]
+# ['v3', a]
+# ['v3', b]
+# ['v1', 2]
+# ['v2', 2]
+# ['v3', a]
+# ['v3', b]
 
 def test():
     print("All solutions using FailPrint")
@@ -158,6 +173,14 @@ def test():
                                                       Member(v1, ['a', 'b'])]),
                                      pls.Once(Member(v2, [1,2])),
                                      Print([v1,v2]),
+                                     pls.fail]))
+    print("Deterministic Predicate Test")
+    pls.engine.execute(pls.conjunct([Member(v1, [1,2]),
+                                     Member(v2, [1,2]),
+                                     Print(['v1', v1]),
+                                     Print(['v2', v2]),
+                                     Member(v3, ['a','b']),
+                                     Print(['v3',v3]),
                                      pls.fail]))
     
 if __name__ == "__main__":
