@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pl-search
-Version: 1.1
+Version: 1.2
 Summary: A module for searching and constraint programming using Prolog ideas.
 Home-page: https://github.com/pjritee/pl_search.git
 Author: Peter Robinson
@@ -18,6 +18,8 @@ The top-level docstring in pl_search/pl_search.py gives details of the module an
 
 ## Version History
 
+* 1.2
+  - improve efficiency of Loop
 * 1.1
   - Add Disjunction
   - fix bug - not untrailing on execute success

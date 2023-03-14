@@ -8,6 +8,8 @@ The top-level docstring in pl_search/pl_search.py gives details of the module an
 
 ## Version History
 
+* 1.2
+  - improve efficiency of Loop
 * 1.1
   - Add Disjunction
   - fix bug - not untrailing on execute success

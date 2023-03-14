@@ -539,21 +539,17 @@ class Loop(Pred):
         self.body_factory = body_factory
 
     def initialize_call(self):
-        # deterministic predicate
-        self.choice_iterator = iter([1])
+        pass
 
     def _try_call(self) -> Status:
-        try:
-            next(self.choice_iterator)
-            if self.body_factory.loop_continues():
-                pred = self.body_factory.make_body_pred()
-                pred.continuation = Loop(self.body_factory)
-                pred.continuation.continuation = self.continuation
-                return engine._push_and_call(pred)
-            return engine._push_and_call(self.continuation)
-        except StopIteration:
-            engine._pop_call()
-            return Status.FAILURE
+        # remove Loop pred from stack as it's no longer required
+        engine._env_stack.pop()
+        if self.body_factory.loop_continues():
+            pred = self.body_factory.make_body_pred()
+            # reuse this object as the continuation for pred
+            pred.continuation = self
+            return engine._push_and_call(pred)
+        return engine._push_and_call(self.continuation)
             
     def try_choice(self, _):
         return True
