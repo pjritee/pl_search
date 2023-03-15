@@ -10,7 +10,7 @@ The top-level docstring in pl_search/pl_search.py gives details of the module an
 
 * 1.5
   - Improve efficiency of send_more_money example by computing best_var only once per loop iteration
-  - add a check to test1.py to determine if output
+  - add a check to test1.py to determine if output is OK
 * 1.4
   - Add SemiDetPred (semi-deterministic predicate)
 * 1.3
