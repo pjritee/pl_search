@@ -173,9 +173,6 @@ class SuccessPrint(pls.DetPred):
         print(' ------')
         print(f'  {M}{O}{N}{E}{Y}')
 
-    def try_choice(self, _):
-        return True
-
 # Make the variables global so they can be easily printed inside SuccessPrint
 S = PuzzleVar(DIGITS)
 E = PuzzleVar(DIGITS0)

@@ -8,6 +8,8 @@ The top-level docstring in pl_search/pl_search.py gives details of the module an
 
 ## Version History
 
+* 1.4
+  - Add SemiDetPred (semi-deterministic predicate) 
 * 1.3
   - Add DetPred (deterministic predicate)
   - Update top-level docstring

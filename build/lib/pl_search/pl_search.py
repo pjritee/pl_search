@@ -31,11 +31,11 @@ and backtrack search implemented using a simplified trail and
 environment stack.
 
 For a given application the programmer typically defines one or more 
-subclasses of Pred (or DetPred) for carrying out the search. The search
-is then executed by calling engine.execute on a conjunction of predicates
-typically ending in a predicate that prints a solution. If all solutions
-are required then the predicate that prints a solution can be followed by the
-builtin predicate 'fail' that triggers backtracking.
+subclasses of Pred, SemiDetPred or DetPred for carrying out the search. 
+The search is then executed by calling engine.execute on a conjunction of 
+predicates typically ending in a predicate that prints a solution. If all 
+solutions are required then the predicate that prints a solution can be 
+followed by the builtin predicate 'fail' that triggers backtracking.
 
 An example of using this module is given in examples/send_more_money.py
 that covers a significant portion of the use of the module. Further 
@@ -191,9 +191,9 @@ class Pred(ABC):
     def __repr__(self):
         return f'Pred : {self.continuation}'
 
-class DetPred(Pred):
-    """ A deterministic predicate (0 or 1 solutions). 
-    As any predicate that inherits from DetPred is deterministic the 
+class SemiDetPred(Pred):
+    """ A semi-deterministic predicate (0 or 1 solutions). 
+    As any predicate that inherits from SemiDetPred is semi-deterministic the 
     programmer is not required to define choice_iterator. 
     Also, as None is passed into try_choice then the
     programmer should ignore the argument when implementing try_choice.
@@ -206,9 +206,14 @@ class DetPred(Pred):
             return engine._push_and_call(self.continuation)
         return Status.FAILURE
 
+class DetPred(SemiDetPred):
+    """ A deterministic predicate (exectly one solutions).
+    try_choice shouldn't be defined - all the work should be done
+    in initialize_call.
+    """
     def try_choice(self, _):
         return True
-
+    
 class Exit(Pred):
     """A special predicate to exit engine execution - for internal use."""
 

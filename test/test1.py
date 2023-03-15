@@ -39,9 +39,6 @@ class Print(pls.DetPred):
     def initialize_call(self):
         print(f'{self.varlst}')
 
-    def try_choice(self, _):
-        return True
-      
     def __repr__(self):
         return f'Print({self.varlst}) : {self.continuation}'
 
