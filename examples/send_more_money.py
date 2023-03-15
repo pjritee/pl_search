@@ -64,9 +64,10 @@ class PuzzleVar(pls.Var):
 
 # A predicate for trying alternative choices for an unbound variable.
 class PuzzlePred(pls.Pred):
-    def __init__(self, constraint_sums, all_vars):
+    def __init__(self, constraint_sums, all_vars, best_var):
         self.constraint_sums = constraint_sums
         self.all_vars = all_vars
+        self.best_var = best_var
 
     # This method is required and is used to initialize the predicate call
     # In this case we pick an unbound variable and determine the possible
@@ -74,9 +75,7 @@ class PuzzlePred(pls.Pred):
     # by the system to backtrack over the possible choices and this attribute
     # needs to be given a value in this method for nondeterministic predicates.
     def initialize_call(self):
-        v = get_best_var(self.all_vars)
-        self.best_var = v
-        self.choice_iterator = v.get_choices()
+        self.choice_iterator = self.best_var.get_choices()
         return True
 
     # This method is also required and is called immediately after
@@ -108,8 +107,6 @@ def get_best_var(all_vars):
             return v
     return None
 
-def more_vars(all_vars):
-    return any(pls.var(v) for v in all_vars)
 
 # SmartPuzzlePred uses deductions as part of testing the choice.
 class SmartPuzzlePred(PuzzlePred):
@@ -158,12 +155,15 @@ class PuzzleFactory(pls.LoopBodyFactory):
     # This method is required and is used to determine if the loop
     # predicate should continue.
     def loop_continues(self) -> bool:
-        return more_vars(self.all_vars)
+        # In order to avoid recomputing the best variable in PuzzlePred
+        # we compute it here and pass it to the PuzzlePred object
+        self.best_var = get_best_var(self.all_vars)
+        return self.best_var is not None
 
     # This method is required and is used to create a predicate
     # to be called as part of the loop body.
     def make_body_pred(self) -> pls.Pred:
-        return self.pred(self.constraint_sums, self.all_vars)
+        return self.pred(self.constraint_sums, self.all_vars, self.best_var)
 
 # A predicate to print out the solution
 class SuccessPrint(pls.DetPred):

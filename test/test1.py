@@ -1,6 +1,9 @@
 # Testing aspects of pl_search
 
 import pl_search as pls
+import subprocess
+import contextlib
+from io import StringIO
 
 class FailPrint(pls.Pred):
     def __init__(self, vs):
@@ -75,62 +78,62 @@ v1 = pls.Var()
 v2 = pls.Var()
 v3 = pls.Var()
 
-# Should print:
-# All solutions using FailPrint
-# [1, a]
-# [1, b]
-# [2, a]
-# [2, b]
-# All solutions using Print and Fail
-# [1, a]
-# [1, b]
-# [2, a]
-# [2, b]
-# First Solution
-# [1, a]
-# Loop Test
-# [1, 1]
-# [1, 2]
-# [2, 1]
-# [2, 2]
-# Once Test Without Once
-# [1, 1, 1]
-# [1, 1, 2]
-# [1, 2, 1]
-# [1, 2, 2]
-# [2, 1, 1]
-# [2, 1, 2]
-# [2, 2, 1]
-# [2, 2, 2]
-# Once Test
-# [1, 1, 1]
-# [1, 1, 2]
-# [2, 1, 1]
-# [2, 1, 2]
-# Disjunction Test
-# [1, 1]
-# [2, 1]
-# [a, 1]
-# [b, 1]
-# Deterministic Predicate Test
-# ['v1', 1]
-# ['v2', 1]
-# ['v3', a]
-# ['v3', b]
-# ['v1', 1]
-# ['v2', 2]
-# ['v3', a]
-# ['v3', b]
-# ['v1', 2]
-# ['v2', 1]
-# ['v3', a]
-# ['v3', b]
-# ['v1', 2]
-# ['v2', 2]
-# ['v3', a]
-# ['v3', b]
+EXPECTED_OUTPUT = """All solutions using FailPrint
+[1, a]
+[1, b]
+[2, a]
+[2, b]
+All solutions using Print and Fail
+[1, a]
+[1, b]
+[2, a]
+[2, b]
+First Solution
+[1, a]
+Loop Test
+[1, 1]
+[1, 2]
+[2, 1]
+[2, 2]
+Once Test Without Once
+[1, 1, 1]
+[1, 1, 2]
+[1, 2, 1]
+[1, 2, 2]
+[2, 1, 1]
+[2, 1, 2]
+[2, 2, 1]
+[2, 2, 2]
+Once Test
+[1, 1, 1]
+[1, 1, 2]
+[2, 1, 1]
+[2, 1, 2]
+Disjunction Test
+[1, 1]
+[2, 1]
+[a, 1]
+[b, 1]
+Deterministic Predicate Test
+['v1', 1]
+['v2', 1]
+['v3', a]
+['v3', b]
+['v1', 1]
+['v2', 2]
+['v3', a]
+['v3', b]
+['v1', 2]
+['v2', 1]
+['v3', a]
+['v3', b]
+['v1', 2]
+['v2', 2]
+['v3', a]
+['v3', b]
+"""
 
-def test():
+def run_tests():
     print("All solutions using FailPrint")
     pls.engine.execute(pls.conjunct([Member(v1, [1,2]),
                                      Member(v2, ['a','b']),
@@ -179,6 +182,18 @@ def test():
                                      Member(v3, ['a','b']),
                                      Print(['v3',v3]),
                                      pls.fail]))
+
+def test():
+    test_stdout = StringIO()
+    with contextlib.redirect_stdout(test_stdout):
+        run_tests()
+    output = test_stdout.getvalue().strip()
+    print("------- TEST OUTPUT ------")
+    print(output)
+    if output == EXPECTED_OUTPUT.strip():
+        print("------- TESTS SUCCEEDED ------")
+    else:
+        print("------- TESTS FAILED ------")
     
 if __name__ == "__main__":
     test()

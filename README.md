@@ -8,8 +8,11 @@ The top-level docstring in pl_search/pl_search.py gives details of the module an
 
 ## Version History
 
+* 1.5
+  - Improve efficiency of send_more_money example by computing best_var only once per loop iteration
+  - add a check to test1.py to determine if output
 * 1.4
-  - Add SemiDetPred (semi-deterministic predicate) 
+  - Add SemiDetPred (semi-deterministic predicate)
 * 1.3
   - Add DetPred (deterministic predicate)
   - Update top-level docstring

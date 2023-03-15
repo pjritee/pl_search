@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pl-search
-Version: 1.4
+Version: 1.5
 Summary: A module for searching and constraint programming using Prolog ideas.
 Home-page: https://github.com/pjritee/pl_search.git
 Author: Peter Robinson
@@ -18,6 +18,10 @@ The top-level docstring in pl_search/pl_search.py gives details of the module an
 
 ## Version History
 
+* 1.5
+  - Improve efficiency of send_more_money example by computing best_var only once per loop iteration
+* 1.4
+  - Add SemiDetPred (semi-deterministic predicate)
 * 1.3
   - Add DetPred (deterministic predicate)
   - Update top-level docstring
