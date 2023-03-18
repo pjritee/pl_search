@@ -52,8 +52,7 @@ class PuzzleVar(pls.Var):
     def bind(self, val):
         if val not in self.choices or val in self.disjoints:
                 return False
-        super().bind(val)
-        return True
+        return super().bind(val)
 
     # As variables get bound to digits those digits are no longer
     # possible choices for other variables.

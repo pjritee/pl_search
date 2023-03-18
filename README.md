@@ -4,10 +4,278 @@ There are several Python constraint solvers but it appears that they are tailore
 
 Being more generic means that the programmer will have more work to do that in other constraint solvers.
 
-The top-level docstring in pl_search/pl_search.py gives details of the module and examples/send_more_money.py is an example of the use of this module. Further test/test1.py has a collection of various simple searches.
+The top-level docstring in `pl_search/pl_search.py` gives details of the module and `examples/send_more_money.py` is an example of the use of this module. Further `test/test1.py` has a collection of various simple searches.
+
+## Installation
+
+The simplest option is a direct installation from github:
+
+`python3 -m pip install -U git+https://github.com/pjritee/pl_search.git`
+
+The other option is to clone the repository and then, from the top-level of the cloned repository, do a pip install:
+
+`python3 -m pip install -U .`
+
+## Example Usage
+
+To illustrate the usage of the module we work through a constraint handling solution to finding 3x3 magic squares.
+The program described here is supplied in `examples/magic_squares.py`.
+
+The first step is to import the module:
+
+```python
+import pl_search as pls
+```
+For a 3x3 magic square the row, column and diagonal sums are all 15 and the entries of the square are from 1,2,3,4,5,6,7,8,9 with each number occurring once each.
+
+We add this information as follows.
+
+```python
+SUM = 15
+CHOICES = set(range(1,10))
+```
+The approach is to create a 3x3 array containing distinct variables and then use constraint programming and backtrack search to find appropriate values for these variables.
+
+We could use `pls.Var()` but given we need to check that the variables
+have to have disjoint values it's better to create a subclass as follows.
+
+```python
+class MSVar(pls.Var):
+
+    def set_disjoint(self, disjoints):
+        self.disjoints = disjoints
+
+    def bind(self, n):
+        if n in self.disjoints or n not in CHOICES:
+            return False
+        return super().bind(n)
+
+    def get_choices(self):
+        known_disjoints = {pls.engine.dereference(n) for n in self.disjoints
+                           if not pls.var(n)}
+        return iter(CHOICES.difference(known_disjoints))
+```
+By checking the value for the variable is a valid choice in `bind` we guarantee that the choice for the variable value satisfies the disjointness constraint and comes from the required set. We use `set_disjoint` to set the disjoint list to be all the variables (after all the variables have been created). Later when we start searching we will use `get_choices` to return an iterator to be used to backtrack through possible choices in the search predicate.
+
+We can then create a list of variables, set their disjoints attribute and create a 3x3 array as follows.
+
+```python
+all_vars = [MSVar() for _ in range(9)]
+for v in all_vars:
+    v.set_disjoint(all_vars)
+square = [all_vars[0:3], all_vars[3:6], all_vars[6:9]]
+```
+If we do that in the interpreter and then look at the value of square we get
+```python
+[[X01, X02, X03], [X04, X05, X06], [X07, X08, X09]]
+```
+where `X01` etc. are the string representations of the variables.
+
+The next step is to consider how we represent the row, column and diagonal sum constraints. The approach taken here is to represent a constraint like
+
+`X01 + X02 + X03 = SUM`
+
+as the pair
+
+`([X01,X02, X03], SUM)`.
+
+As we search for a solution, variables get bound to numbers and the constraints need to be checked and deductions made where possible. There are two approaches we could take. The first is to leave the constraints unchanged and check them and do deductions as variables get bound. The other approach is to simplify the constraints as we proceed. For this simple problem the first approach is viable but as the size and complexity of the constraints increase this approach will become very inefficient. We will take the second approach but we need to be careful because the simplifications that can be made are based on choices for variables and so when we backtrack we also have to undo simplifications to constraints. This can be managed using `UpdatableVar` to implement a form of backtrackable assignment.
+
+Again, we have two approaches. The first is to have one `UpdatableVar` to store the entire list of constraints and the other is to use an `UpdatableVar` for each constraint. For the first approach, when we simplify the constraints we need to make a new list containing the update constraints.
+This gives us a chance to remove solved constraints. The downside of this approach is that we end up with lots of near copies of the constraints list as we move forward in the search. The downside of the second approach is we don't get a chance to remove solved constraints.
+
+We take the second approach and define
+
+```python
+def generate_constraints(square):
+    constraints = \
+        [pls.UpdatableVar(([square[i][j] for i in range(3)], SUM)) \
+         for j in range(3)] + \
+        [pls.UpdatableVar(([square[j][i] for i in range(3)], SUM)) \
+         for j in range(3)] + \
+        [pls.UpdatableVar(([square[i][i] for i in range(3)], SUM))] + \
+        [pls.UpdatableVar(([square[i][2-i] for i in range(3)], SUM))]
+    return constraints
+```
+Continuing in the interpreter we get
+
+```
+>>> generate_constraints(square)
+[UpdatableVar(([X01, X04, X07], 15)), UpdatableVar(([X02, X05, X08], 15)), UpdatableVar(([X03, X06, X09], 15)), UpdatableVar(([X01, X02, X03], 15)), UpdatableVar(([X04, X05, X06], 15)), UpdatableVar(([X07, X08, X09], 15)), UpdatableVar(([X01, X05, X09], 15)), UpdatableVar(([X03, X05, X07], 15))]
+
+```
+Now that we have generated the constraints we need to be able to test them and carry out any possible deductions and so we give the following definition.
+
+```python
+def check_constraints(constraints):
+    """ check and simplify constraints.
+    Return True iff constraints are satisfiable.
+    """
+    progress = True
+    while progress:
+        # keep repeating until no more 'useful' simplifications are possible
+        progress = False        
+        for c in constraints:
+            lhs, rhs = c.value
+            if lhs == [] and rhs == 0:
+                # solved constraint
+                continue
+            var_lhs = [x for x in lhs if  pls.var(x)]
+            ground_lhs = [pls.engine.dereference(x) for x in lhs
+                          if not x in var_lhs]
+            new_rhs = rhs - sum(ground_lhs)
+            if var_lhs == []:
+                if new_rhs == 0:
+                    # newly solved constraint
+                    pls.engine.unify(c, ([], 0))
+                return False
+            if new_rhs < 0:
+                # no solution is possible
+                return False
+            if len(var_lhs) == 1: # constraint is Var = new_rhs
+                progress = True
+                if not pls.engine.unify(var_lhs[0], new_rhs):
+                    # this fails when new_rhs is too big
+                    # or is already taken
+                    return False
+                # newly solved constraint
+                pls.engine.unify(c, ([], 0))
+            elif new_rhs != rhs:
+                # the constraint is simplified
+                progress = True
+                pls.engine.unify(c, (var_lhs, new_rhs))
+    return True
+
+```
+`pl_search` contains an `Engine` class and an instance `engine` of that class.
+The `engine` object is responsible for executing predicates, including managing backtracking. Notice that we use `pls.engine.unify` rather than `bind`
+as `bind` does not trail the variable and so the binding would not be undone on backtracking. We also use `pls.engine.dereference(x)` although in this case we could have used x.deref() because we know x is a variable (that might be bound). In general it's better to use `pls.engine.dereference` as this also works as expected when the argument is not a variable.
+
+Note, above, that `c` is an `UpdatableVar` and `c.value` is the current values for `c` and `pls.engine.unify(c, (var_lhs, new_rhs))` assigns this new value to `c`. The old value of `c` is trailed so that, on backtracking, the old value will be restored.
+
+We can test this in the interpreter as, for example:
+
+```python
+>>> pls.engine.unify(all_vars[0], 8)
+True
+>>> pls.engine.unify(all_vars[1], 1)
+True
+>>> check_constraints(constraints)
+True
+>>> constraints
+[UpdatableVar(([X04, X07], 7)), UpdatableVar(([X05, X08], 14)), UpdatableVar(([X06, X09], 9)), UpdatableVar(([], 0)), UpdatableVar(([X04, X05, X06], 15)), UpdatableVar(([X07, X08, X09], 15)), UpdatableVar(([X05, X09], 7)), UpdatableVar(([X05, X07], 9))]
+>>> all_vars
+[8, 1, 6, X04, X05, X06, X07, X08, X09]
+```
+Notice that we were able to deduce `X03` must be 6 and that several of the constraints have been simplified.
+
+Now that we have the basic machinery we are ready to define predicates to carry out the search.
+
+When we execute (call) a predicate there are two possible outcomes. One is that the call fails and the other is that it succeeds. In both cases `engine` will carry out a complete reset - equivalent to backtracking to before the call to the predicate. This means that, even on success, the variable bindings
+will be undone and so, in order to get solutions we need to either print them
+or deal with solutions some other way inside a predicate - for example store them away, send them as a message or put them on a queue.
+
+Below is a predicate definition that prints the array when called.
+
+```python  
+class Print(pls.DetPred):
+    def __init__(self, array):
+        self.array = array
+
+    def initialize_call(self):
+        for j in range(3):
+            print(' '.join(str(pls.engine.dereference(self.array[j][i]))
+                           for i in range(3)))
+
+```
+`Print` is declared as a `DetPred` which means it is deterministic - it has exactly one solution. We are required to define `initialize_call` that gets executed as soon as a `Print` predicate is called.
+
+We can test this in the interpreter as follows (continuing on from the earlier interpreter interaction)
+
+```
+>>> pls.engine.execute(Print(square))
+8 1 6
+X04 X05 X06
+X07 X08 X09
+True
+```
+
+Now we are ready to program the predicate that will carry out the search.
+
+Pseudo-code for this kind of problem is something like
+```
+while there are variables left
+    pick a variable
+    calculate the possible choices for the variable
+    make a choice for the variable
+    if the constraints are satisfiable then continue
+    else backtrack and make another choice
+```
+This strategy can be implemented using the `Loop` predicate. This takes a single argument that is a subclass of `LoopBodyFactory` with definitions for `loop_continues` (which returns True if the loop should continue) and `make_body_pred` that generates a predicate to be called in the body of the loop.
+
+Suitable definitions are given below (including `get_best_var`)
+
+```python
+def get_best_var(all_vars):
+    """Return the first remaining variable in all_vars else return None if
+    there are no more variables."""
+    for v in all_vars:
+        if pls.var(v):
+            return v
+    return None
+
+class BodyPred(pls.Pred):
+    def __init__(self, constrains, all_vars, best_var):
+        self.constraints = constraints
+        self.all_vars = all_vars
+        self.best_var = best_var
+
+    def initialize_call(self):
+        #required method and self.choice_iterator must be given a value
+        self.choice_iterator = self.best_var.get_choices()
+        return True
+
+    def try_choice(self, choice):
+        #required method
+        return pls.engine.unify(self.best_var, choice) and \
+            check_constraints(self.constraints)
+
+class MSFactory(pls.LoopBodyFactory):
+
+    def __init__(self, constraints, all_vars):
+        self.constraints =  constraints
+        self.all_vars = all_vars
+
+    def loop_continues(self):
+        self.best_var = get_best_var(self.all_vars)
+        return self.best_var is not None
+
+    def make_body_pred(self) -> pls.Pred:
+        return BodyPred(self.constraints, self.all_vars, self.best_var)
+
+```
+Here we take the simplest approach and choose the first remaining variable in `all_vars` for `get_best_var` but we could have chosen a variable from a constraint with the smallest left hand side.
+
+Now we can carry out the search. If we just want the first solution we can try:
+```
+pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square)])
+```
+and we will get the output
+```
+2 7 6
+9 5 1
+4 3 8
+```
+On the other hand, if we want all solutions we can try:
+```
+pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square), pls.fail])
+```
+The meta-predicate `pls.conjunct` conjoins a list of predicates into one predicate by chaining the predicates continuations. The builtin predicate `pls.fail` simply fails, triggering backtracking.
 
 ## Version History
 
+* 1.6
+  - Add sections on installation and example use to README
 * 1.5
   - Improve efficiency of send_more_money example by computing best_var only once per loop iteration
   - add a check to test1.py to determine if output is OK
