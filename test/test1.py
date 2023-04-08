@@ -4,6 +4,8 @@ import pl_search as pls
 import subprocess
 import contextlib
 from io import StringIO
+import sys
+import itertools
 
 class FailPrint(pls.Pred):
     def __init__(self, vs):
@@ -16,8 +18,6 @@ class FailPrint(pls.Pred):
         # when called
         self.choice_iterator = iter([])
         
-    def try_choice(self, _):
-        return True
 
 
 # The same as the Prolog predicate member - it can be used in the same way
@@ -29,11 +29,8 @@ class Member(pls.Pred):
         self.choices = choices
 
     def initialize_call(self):
-        self.choice_iterator = iter(self.choices)
+        self.choice_iterator = pls.VarChoiceIterator(self.v, self.choices)
 
-    def try_choice(self,c):
-        return pls.engine.unify(self.v, c)
-    
 
 class Print(pls.DetPred):
     def __init__(self, varlst):
@@ -50,16 +47,13 @@ class LoopBodyPred(pls.Pred):
         self.pred_vars = pred_vars
 
     def initialize_call(self):
-        # The possible choices are 1,2
-        self.choice_iterator = iter([1,2])
         for v in self.pred_vars:
             if pls.var(v):
                 self.v = v
                 break
+        # The possible choices are 1,2
+        self.choice_iterator = pls.VarChoiceIterator(v, [1,2])
         
-    def try_choice(self, val):
-        return pls.engine.unify(self.v, val)
-
     def __repr__(self):
         return f'LoopTest {self.continuation = }'
             
@@ -78,6 +72,28 @@ v1 = pls.Var()
 v2 = pls.Var()
 v3 = pls.Var()
 
+
+class SetChoiceIterator:
+
+    def __init__(self, vars_, choices):
+        self.vars_ = vars_
+        n = len(vars_)
+        self.choices = itertools.combinations(choices, n)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return pls.VarChoice(self.vars_, list(next(self.choices)))
+
+class SetChoicePred(pls.Pred):
+    def __init__(self, vars_, choices):
+        self.vars_ = vars_
+        self.choices = choices
+
+    def initialize_call(self):
+        self.choice_iterator = SetChoiceIterator(self.vars_, self.choices)
+    
 EXPECTED_OUTPUT = """All solutions using FailPrint
 [1, a]
 [1, b]
@@ -131,6 +147,13 @@ Deterministic Predicate Test
 ['v2', 2]
 ['v3', a]
 ['v3', b]
+SetChoiceIterator Test
+[1, 2]
+[1, 3]
+[1, 4]
+[2, 3]
+[2, 4]
+[3, 4]
 """
 
 def run_tests():
@@ -181,6 +204,10 @@ def run_tests():
                                      Print(['v2', v2]),
                                      Member(v3, ['a','b']),
                                      Print(['v3',v3]),
+                                     pls.fail]))
+    print("SetChoiceIterator Test")
+    pls.engine.execute(pls.conjunct([SetChoicePred([v1,v2], [1,2,3,4]),
+                                     Print([v1,v2]),
                                      pls.fail]))
 
 def test():

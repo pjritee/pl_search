@@ -18,7 +18,7 @@ The other option is to clone the repository and then, from the top-level of the 
 
 ## Example Usage
 
-To illustrate the usage of the module we work through a constraint handling solution to finding 3x3 magic squares.
+To illustrate the use of the module we work through a constraint handling solution to finding NxN magic squares.
 The program described here is supplied in `examples/magic_squares.py`.
 
 The first step is to import the module:
@@ -26,15 +26,21 @@ The first step is to import the module:
 ```python
 import pl_search as pls
 ```
-For a 3x3 magic square the row, column and diagonal sums are all 15 and the entries of the square are from 1,2,3,4,5,6,7,8,9 with each number occurring once each.
 
-We add this information as follows.
+We first initialise some constants (for a 3x3 magic square) .
 
 ```python
-SUM = 15
-CHOICES = set(range(1,10))
+N = 3
+N2 = N**2
+
+# each row, column, diagonal sum
+SUM = (N * (N2 + 1))//2
+
+# The square to be filled in with the numbers 1,2,3,.. N**2
+CHOICES = set(range(1,N2+1))
+
 ```
-The approach is to create a 3x3 array containing distinct variables and then use constraint programming and backtrack search to find appropriate values for these variables.
+The approach is to create a NxN array containing distinct variables and then use constraint programming and backtrack search to find appropriate values for these variables.
 
 We could use `pls.Var()` but given we need to check that the variables
 have to have disjoint values it's better to create a subclass as follows.
@@ -53,17 +59,18 @@ class MSVar(pls.Var):
     def get_choices(self):
         known_disjoints = {pls.engine.dereference(n) for n in self.disjoints
                            if not pls.var(n)}
-        return iter(CHOICES.difference(known_disjoints))
+        return CHOICES.difference(known_disjoints)
 ```
-By checking the value for the variable is a valid choice in `bind` we guarantee that the choice for the variable value satisfies the disjointness constraint and comes from the required set. We use `set_disjoint` to set the disjoint list to be all the variables (after all the variables have been created). Later when we start searching we will use `get_choices` to return an iterator to be used to backtrack through possible choices in the search predicate.
+By checking the value for the variable is a valid choice in `bind` we guarantee that the choice for the variable value satisfies the disjointness constraint and comes from the required set. We use `set_disjoint` to set the disjoint list to be all the variables (after all the variables have been created). Later when we start searching we will use `get_choices` to  an iterator to be used to backtrack through possible choices in the search predicate.
 
 We can then create a list of variables, set their disjoints attribute and create a 3x3 array as follows.
 
 ```python
-all_vars = [MSVar() for _ in range(9)]
+all_vars = [MSVar() for _ in range(N2)]
 for v in all_vars:
     v.set_disjoint(all_vars)
-square = [all_vars[0:3], all_vars[3:6], all_vars[6:9]]
+square = [all_vars[i:i+N] for i in range(0, N2, N)]
+
 ```
 If we do that in the interpreter and then look at the value of square we get
 ```python
@@ -88,13 +95,14 @@ We take the second approach and define
 
 ```python
 def generate_constraints(square):
+    """Return the row, column and diagonal sum constraints."""
     constraints = \
-        [pls.UpdatableVar(([square[i][j] for i in range(3)], SUM)) \
-         for j in range(3)] + \
-        [pls.UpdatableVar(([square[j][i] for i in range(3)], SUM)) \
-         for j in range(3)] + \
-        [pls.UpdatableVar(([square[i][i] for i in range(3)], SUM))] + \
-        [pls.UpdatableVar(([square[i][2-i] for i in range(3)], SUM))]
+        [pls.UpdatableVar(([square[i][j] for i in range(N)], SUM))
+         for j in range(N)] + \
+        [pls.UpdatableVar(([square[j][i] for i in range(N)], SUM))
+         for j in range(N)] + \
+        [pls.UpdatableVar(([square[i][i] for i in range(N)], SUM))] + \
+        [pls.UpdatableVar(([square[i][N-1-i] for i in range(N)], SUM))]
     return constraints
 ```
 Continuing in the interpreter we get
@@ -179,14 +187,16 @@ Below is a predicate definition that prints the array when called.
 
 ```python  
 class Print(pls.DetPred):
+    """Pretty print the supplied array."""
+
     def __init__(self, array):
         self.array = array
 
     def initialize_call(self):
-        for j in range(3):
-            print(' '.join(str(pls.engine.dereference(self.array[j][i]))
-                           for i in range(3)))
-
+        for j in range(N):
+            print(''.join(f'{str(pls.engine.dereference(self.array[j][i])):>5}'
+                           for i in range(N)))
+        print()
 ```
 `Print` is declared as a `DetPred` which means it is deterministic - it has exactly one solution. We are required to define `initialize_call` that gets executed as soon as a `Print` predicate is called.
 
@@ -194,9 +204,9 @@ We can test this in the interpreter as follows (continuing on from the earlier i
 
 ```
 >>> pls.engine.execute(Print(square))
-8 1 6
-X04 X05 X06
-X07 X08 X09
+    8    1    6
+  X04  X05  X06
+  X07  X08  X09
 True
 ```
 
@@ -232,13 +242,14 @@ class BodyPred(pls.Pred):
 
     def initialize_call(self):
         #required method and self.choice_iterator must be given a value
-        self.choice_iterator = self.best_var.get_choices()
+        self.choice_iterator = \
+            pls.VarChoiceIterator(self.best_var, self.best_var.get_choices())
         return True
 
-    def try_choice(self, choice):
-        #required method
-        return pls.engine.unify(self.best_var, choice) and \
-            check_constraints(self.constraints)
+    def test_choice(self):
+        # We need to check the constraints and carry out deductions so this
+        # method is required
+        return check_constraints(self.constraints)
 
 class MSFactory(pls.LoopBodyFactory):
 
@@ -254,7 +265,7 @@ class MSFactory(pls.LoopBodyFactory):
         return BodyPred(self.constraints, self.all_vars, self.best_var)
 
 ```
-Here we take the simplest approach and choose the first remaining variable in `all_vars` for `get_best_var` but we could have chosen a variable from a constraint with the smallest left hand side.
+Here we take the simplest approach and choose the first remaining variable in `all_vars` for `get_best_var` but we probably should have chosen a variable from a constraint with the smallest left hand side.
 
 Now we can carry out the search. If we just want the first solution we can try:
 ```
@@ -262,9 +273,9 @@ pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Pri
 ```
 and we will get the output
 ```
-2 7 6
-9 5 1
-4 3 8
+    2    7    6
+    9    5    1
+    4    3    8
 ```
 On the other hand, if we want all solutions we can try:
 ```
@@ -272,8 +283,40 @@ pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Pri
 ```
 The meta-predicate `pls.conjunct` conjoins a list of predicates into one predicate by chaining the predicates continuations and is like conjunction in Prolog. The builtin predicate `pls.fail` simply fails, triggering backtracking (like fail in Prolog).
 
+For this problem we use the builtin ```VarChoiceIterator``` because we simply need to try each choice for a given variable. In more complicated situations the programmer might need to define their own choice iterator.
+
+As an example consider the case where we have a list of variables and we want the choices to be all possible sublists (without order) of some list of values. In ```test/test1.py``` we define the following.
+
+```python
+class SetChoiceIterator:
+
+    def __init__(self, vars_, choices):
+        self.vars_ = vars_
+        n = len(vars_)
+        self.choices = itertools.combinations(choices, n)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return pls.VarChoice(self.vars_, list(next(self.choices)))
+
+class SetChoicePred(pls.Pred):
+    def __init__(self, vars_, choices):
+        self.vars_ = vars_
+        self.choices = choices
+
+    def initialize_call(self):
+        self.choice_iterator = SetChoiceIterator(self.vars_, self.choices)
+
+```
+In the above example we still use ```VarChoice``` as we are simply unifying two terms. In an even more sophisticated example, each choice might mean the addition of some sort of constraint. In that case we would need to define a choice iterator class  as well as a Choice class for adding the constraint.
+
 ## Version History
 
+* 1.7
+  - Make choice iteration more generic by having choice iterators generate Choice objects that are responsible for making the choice.
+  - Update the examples and README to use these choice iterators.
 * 1.6
   - Add sections on installation and example use to README
 * 1.5

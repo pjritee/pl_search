@@ -59,7 +59,7 @@ class PuzzleVar(pls.Var):
     def get_choices(self):
         known_disjoints = {pls.engine.dereference(n) for n in self.disjoints
                            if not pls.var(n)}
-        return iter(self.choices.difference(known_disjoints))
+        return self.choices.difference(known_disjoints)
 
 # A predicate for trying alternative choices for an unbound variable.
 class PuzzlePred(pls.Pred):
@@ -74,19 +74,13 @@ class PuzzlePred(pls.Pred):
     # by the system to backtrack over the possible choices and this attribute
     # needs to be given a value in this method for nondeterministic predicates.
     def initialize_call(self):
-        self.choice_iterator = self.best_var.get_choices()
+        self.choice_iterator = \
+            pls.VarChoiceIterator(self.best_var, self.best_var.get_choices())
         return True
 
-    # This method is also required and is called immediately after
-    # initialize_call and each time the system backtracks to try an alternative
-    # The argument to the method is the current choice pruduced by
-    # next(self.choice_iterator). It return True iff the choice is a valid one.
-    def try_choice(self, choice) -> bool:
-        # As in Prolog implementations it's more typical to use unify
-        # rather than bind directly as it's more general.
-        return pls.engine.unify(self.best_var, choice) and self.test_choice()
    
     def test_choice(self):
+        # In this case a test is required so this method needs to be defined.
         # Check if all the ground columns in the sum produce the correct result.
         for left, right in self.constraint_sums:
             if all(not pls.var(x) for x in left) and \

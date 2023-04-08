@@ -137,6 +137,7 @@ class Pred(ABC):
     iterator is used to drive backtracking.
     """
 
+        
     @property
     def continuation(self):
         """ The predicate to be called if (and when) this predicate succeeds.
@@ -157,10 +158,16 @@ class Pred(ABC):
         self.initialize_call()
         return self._try_call()
 
+    def test_choice(self):
+        """Test the choice (just made). To be overridden in subclass
+        if a test is required for the given choice."""
+        return True
+    
     def _try_call(self) -> Status:
         """ Try the alternative choices. For internal use. """
         try:
-            if self.try_choice(next(self.choice_iterator)):
+            if next(self.choice_iterator).apply_choice() and \
+               self.test_choice():
                 # the call succeeded - call the next predicate
                 return engine._push_and_call(self.continuation)
             # the call failed
@@ -177,14 +184,6 @@ class Pred(ABC):
         variable and setting the choice_iterator so that, on backtracking,
         the variable can be bound to each choice in the iterator.
         Setting choice_iterator is required here.
-        """
-        pass
-
-    @abstractmethod
-    def try_choice(self, choice)-> bool:
-        """choice is the next item of the choice_iterator and this should
-        return True iff this is a valid choice for whatever valid means
-        in the application.
         """
         pass
 
@@ -250,7 +249,36 @@ class Fail(Pred):
 fail = Fail()
 _exit = Exit()
     
+class Choice(Protocol):
+    """Creating choice instances - the return of a choice iterator."""
 
+    def apply_choice(self) -> bool:
+        """Apply the choice returning True iff the choice is OK."""
+
+class VarChoiceIterator:
+    """Create an iterator for a variable and it's possible choices. """
+
+    def __init__(self, var_, choices):
+        self.var_ = var_
+        self.choices = iter(choices)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return VarChoice(self.var_, next(self.choices))
+
+
+class VarChoice(Choice):
+    """A particular choice (next) from a VarChoiceIterator."""
+
+    def __init__(self, var_, choice):
+        self.var_ = var_
+        self.choice = choice
+        
+    def apply_choice(self):
+        return engine.unify(self.var_, self.choice)
+    
 class Engine:
     """Engine is responsible for managing the execution of (calling) the
     supplied predicate (and it's continuation). This includes managing
@@ -577,9 +605,6 @@ class Loop(Pred):
             return engine._push_and_call(pred)
         return engine._push_and_call(self.continuation)
             
-    def try_choice(self, _):
-        return True
-     
 
     def __repr__(self):
         return f'Loop(self.body_factory) : {self.continuation}'
@@ -596,8 +621,6 @@ class _OnceEnd(DetPred):
         engine._pop_to_once_()
         return engine._push_and_call(self.continuation)
             
-    def try_choice(self, _):
-        return True
     
 class Once(DetPred):
     """The Python implementation of the Prolog once meta-predicate
@@ -616,9 +639,6 @@ class Once(DetPred):
         self._pred.continuation.continuation = self.continuation
         return engine._push_and_call(self._pred)
             
-    def try_choice(self, _):
-        return True
-
         
 class Disjunction(Pred):
     """The predicate that is the disjunction of a list of predicates.
@@ -640,5 +660,3 @@ class Disjunction(Pred):
             engine._pop_call()
             return Status.FAILURE
             
-    def try_choice(self, _):
-        return True

@@ -1,11 +1,15 @@
 import pl_search as pls
 
-# The complete code for the 3x3 magic square example as discussed in README
+# The complete code for the NxN magic square example as discussed in README
+# Change the next line for a larger magic square
+N = 3
+N2 = N**2
 
 # each row, column, diagonal sum
-SUM = 15
-# The square to be filled in with the numbers 1,2,3,4,5,6,7,8,9
-CHOICES = set(range(1,10))
+SUM = (N * (N2 + 1))//2
+
+# The square to be filled in with the numbers 1,2,3,.. N**2
+CHOICES = set(range(1,N2+1))
 
 class MSVar(pls.Var):
     """The variables used to initialize the magic square.
@@ -21,10 +25,10 @@ class MSVar(pls.Var):
         return super().bind(n)
 
     def get_choices(self):
-        """Return an iterator containing the possible valid choices"""
+        """Return a list containing the possible valid choices"""
         known_disjoints = {pls.engine.dereference(n) for n in self.disjoints
                            if not pls.var(n)}
-        return iter(CHOICES.difference(known_disjoints))
+        return CHOICES.difference(known_disjoints)
     
 class Print(pls.DetPred):
     """Pretty print the supplied array."""
@@ -33,20 +37,20 @@ class Print(pls.DetPred):
         self.array = array
 
     def initialize_call(self):
-        for j in range(3):
-            print(' '.join(str(pls.engine.dereference(self.array[j][i]))
-                           for i in range(3)))
+        for j in range(N):
+            print(''.join(f'{str(pls.engine.dereference(self.array[j][i])):>5}'
+                           for i in range(N)))
         print()
 
 def generate_constraints(square):
     """Return the row, column and diagonal sum constraints."""
     constraints = \
-        [pls.UpdatableVar(([square[i][j] for i in range(3)], SUM))
-         for j in range(3)] + \
-        [pls.UpdatableVar(([square[j][i] for i in range(3)], SUM))
-         for j in range(3)] + \
-        [pls.UpdatableVar(([square[i][i] for i in range(3)], SUM))] + \
-        [pls.UpdatableVar(([square[i][2-i] for i in range(3)], SUM))]
+        [pls.UpdatableVar(([square[i][j] for i in range(N)], SUM))
+         for j in range(N)] + \
+        [pls.UpdatableVar(([square[j][i] for i in range(N)], SUM))
+         for j in range(N)] + \
+        [pls.UpdatableVar(([square[i][i] for i in range(N)], SUM))] + \
+        [pls.UpdatableVar(([square[i][N-1-i] for i in range(N)], SUM))]
     return constraints
 
 def check_constraints(constraints):
@@ -100,21 +104,22 @@ def get_best_var(all_vars):
 class BodyPred(pls.Pred):
     """This predicate is called in the body of Loop.
     """
-    def __init__(self, constrains, all_vars, best_var):
+    def __init__(self, constraints, all_vars, best_var):
         self.constraints = constraints
         self.all_vars = all_vars
         self.best_var = best_var
 
     def initialize_call(self):
         #required method and self.choice_iterator must be given a value
-        self.choice_iterator = self.best_var.get_choices()
+        self.choice_iterator = \
+            pls.VarChoiceIterator(self.best_var, self.best_var.get_choices())
         return True
 
-    def try_choice(self, choice):
-        #required method
-        return pls.engine.unify(self.best_var, choice) and \
-            check_constraints(self.constraints)
-        
+    def test_choice(self):
+        # We need to check the constraints and carry out deductions so this 
+        # method is required
+        return check_constraints(self.constraints)
+       
 class MSFactory(pls.LoopBodyFactory):
     """The factory called by Loop."""
     
@@ -130,18 +135,20 @@ class MSFactory(pls.LoopBodyFactory):
         return BodyPred(self.constraints, self.all_vars, self.best_var)
 
 def solve(): 
-    all_vars = [MSVar() for _ in range(9)]
+    all_vars = [MSVar() for _ in range(N2)]
     for v in all_vars:
         v.set_disjoint(all_vars)
-    square = [all_vars[0:3], all_vars[3:6], all_vars[6:9]]
+    square = [all_vars[i:i+N] for i in range(0, N2, N)]
     constraints = generate_constraints(square)
     # first solution
-    #pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square), pls.fail]))
+    pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square)]))
     
     #all solutions
-    pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)),
-                                     Print(square), pls.fail]))
+    #pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square), pls.fail]))
 
 
 if __name__ == "__main__":
     solve()
+
+
+    

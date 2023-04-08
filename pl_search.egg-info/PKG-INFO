@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pl-search
-Version: 1.6
+Version: 1.7
 Summary: A module for searching and constraint programming using Prolog ideas.
 Home-page: https://github.com/pjritee/pl_search.git
 Author: Peter Robinson
@@ -12,7 +12,7 @@ License-File: LICENSE.txt
 
 There are several Python constraint solvers but it appears that they are tailored for specific domains such as integers. The aim of this module is to be quite generic and support searching and constraint solving over a wide range of domains including working with symbolic state and constraints. This module relies quite heavily on ideas from Prolog such as Prolog like variables, environments and trailing to support backtracking search.
 
-Being more generic means that the programmer will have more work to do that in other constraint solvers.
+Being more generic means that the programmer may have more work to do that in other constraint solvers.
 
 The top-level docstring in `pl_search/pl_search.py` gives details of the module and `examples/send_more_money.py` is an example of the use of this module. Further `test/test1.py` has a collection of various simple searches.
 
@@ -159,7 +159,7 @@ def check_constraints(constraints):
 ```
 `pl_search` contains an `Engine` class and an instance `engine` of that class.
 The `engine` object is responsible for executing predicates, including managing backtracking. Notice that we use `pls.engine.unify` rather than `bind`
-as `bind` does not trail the variable and so the binding would not be undone on backtracking. We also use `pls.engine.dereference(x)` although in this case we could have used x.deref() because we know x is a variable (that might be bound). In general it's better to use `pls.engine.dereference` as this also works as expected when the argument is not a variable.
+as `bind` does not trail the variable and so the binding would not be undone on backtracking. We also use `pls.engine.dereference(x)` although in this case we could have used `x.deref()` because we know x is a variable (that might be bound). In general it's better to use `pls.engine.dereference` as this also works as expected when the argument is not a variable.
 
 Note, above, that `c` is an `UpdatableVar` and `c.value` is the current values for `c` and `pls.engine.unify(c, (var_lhs, new_rhs))` assigns this new value to `c`. The old value of `c` is trailed so that, on backtracking, the old value will be restored.
 
@@ -210,7 +210,7 @@ X07 X08 X09
 True
 ```
 
-Now we are ready to program the predicate that will carry out the search.
+Now we are ready to write the code that will carry out the search.
 
 Pseudo-code for this kind of problem is something like
 ```
@@ -221,7 +221,7 @@ while there are variables left
     if the constraints are satisfiable then continue
     else backtrack and make another choice
 ```
-This strategy can be implemented using the `Loop` predicate. This takes a single argument that is a subclass of `LoopBodyFactory` with definitions for `loop_continues` (which returns True if the loop should continue) and `make_body_pred` that generates a predicate to be called in the body of the loop.
+This strategy can be implemented using the `Loop` meta-predicate. This takes a single argument that is a subclass of `LoopBodyFactory` with definitions for `loop_continues` (which returns True if the loop should continue) and `make_body_pred` that generates a predicate to be called in the body of the loop.
 
 Suitable definitions are given below (including `get_best_var`)
 
@@ -280,7 +280,7 @@ On the other hand, if we want all solutions we can try:
 ```
 pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square), pls.fail])
 ```
-The meta-predicate `pls.conjunct` conjoins a list of predicates into one predicate by chaining the predicates continuations. The builtin predicate `pls.fail` simply fails, triggering backtracking.
+The meta-predicate `pls.conjunct` conjoins a list of predicates into one predicate by chaining the predicates continuations and is like conjunction in Prolog. The builtin predicate `pls.fail` simply fails, triggering backtracking (like fail in Prolog).
 
 ## Version History
 
