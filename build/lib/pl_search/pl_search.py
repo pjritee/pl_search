@@ -54,8 +54,24 @@ and print a solution.
 
 Using this module the programmer would need to set up a Python equivalent of
 State using Var objects for the unknowns and then defining a Pred class
-where initialize_call initialises and where try_choice defines how to process
-a given choice.
+where initialize_call initialises the predicate typically by defining a
+choice iterator and, when needed, test_choice to determine if the choice is 
+valid and to possibly carry out deductions.
+
+The choice iterator needs to generate Choice objects that contain the
+apply_choice method that applies the choice. The simplest choice iterator is 
+the builtin VarChoiceIterator that generates VarChoice objects whose 
+apply_choice method simply unifies the variable with the choice as in the 
+following Member predicate (that is like the Prolog member predicate).
+
+class Member(pls.Pred):
+    def __init__(self, v, choices):
+        self.v = v
+        self.choices = choices
+
+    def initialize_call(self):
+        self.choice_iterator = pls.VarChoiceIterator(self.v, self.choices)
+
 
 The management of calling predicates and backtracking is done in Engine.
 
@@ -360,13 +376,10 @@ class Engine:
         """Backtrack (reset all varible bindings) as a consequence of calling
         the 'current' predicate"""
         _, trail_index = self._env_stack[-1]
-        while len(self._trail_stack) > trail_index:
-            v, oldvalue = self._trail_stack.pop()
+        trail_stk = self._trail_stack
+        while len(trail_stk) > trail_index:
+            v, oldvalue = trail_stk.pop()
             v.reset(oldvalue)
-
-    def _push(self, pred:Pred):
-        """Add a new predicate to the environment stack."""
-        self._env_stack.append((pred, len(self._trail_stack)))
 
     def _push_and_call(self, pred:Pred) -> Status:
         """Add a new predicate to the environment stack and
@@ -374,7 +387,8 @@ class Engine:
         """
         if pred is None:
             return Status.SUCCESS
-        self._push(pred)
+        # Add pred to the environment stack
+        self._env_stack.append((pred, len(self._trail_stack)))
         return pred._call_pred()
 
     def _pop_call(self) -> Pred:
@@ -479,23 +493,22 @@ class Var:
         dereference chain and return the ultimate value."""
         val = self
         while True:
-            if val.value is None:
+            val_value = val.value
+            if val_value is None:
                 # unbound variabe
                 return val
-            if not isinstance(val.value, Var):
+            if not isinstance(val_value, Var): 
                 # end of reference chain is a non-var value
-                return val.value
+                return val_value
             # step down ref chain
-            val = val.value
-        # check we never get here
-        assert False
+            val = val_value
 
     def bind(self, val:object):
         """Bind the variable to the supplied value."""
         # check unbound
-        assert isinstance(self, UpdatableVar) or self.value is None
+        #assert isinstance(self, UpdatableVar) or self.value is None
         # check we don't get a loop
-        assert not (isinstance(val, Var) and val.deref() == self)
+        #assert not (isinstance(val, Var) and val.deref() == self)
         # do binding
         self.value = val
         return True
@@ -509,30 +522,30 @@ class Var:
         """Test for equality of this var with the supplied term."""
         # deref v and other
         v = self.deref()
-        if var(other):
+        other_is_var = isinstance(other, Var)
+        if other_is_var:
             other = other.deref()
-        if isinstance(v, Var) and isinstance(other, Var):
-            return v.id_ == other.id_
-        if isinstance(v, Var) or isinstance(other, Var):
-            return False
-        return v == other
+            other_is_var = isinstance(other, Var)
+        v_is_var = isinstance(v, Var)
+        if other_is_var:
+            return v_is_var and v.id_ == other.id_
+        return not v_is_var and v == other
 
     def __lt__(self, other:object):
         """Like the @< test in Prolog."""
         # deref v
         v = self.deref()
-        if var(other):
+        other_is_var = isinstance(other, Var)
+        if other_is_var:
             other = other.deref()
-        if var(v):
-            if var(other):
-                # if both vars then use id's
-                return v.id_ < other.id_
-            return False
-        if var(other):
-            return True
+            other_is_var = isinstance(other, Var)
+        v_is_var = isinstance(v, Var)
+        if other_is_var:
+            # if both vars then use id's
+            return  v_is_var and v.id_ < other.id_
         # this can only succeed if both v and i (deref'ed) are
         # equal as Python terms
-        return v < other
+        return not v_is_var and v < other
 
 class UpdatableVar(Var):
     """UpdatableVar is used to implement what some Prologs call

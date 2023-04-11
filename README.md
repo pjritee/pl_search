@@ -314,6 +314,8 @@ In the above example we still use ```VarChoice``` as we are simply unifying two 
 
 ## Version History
 
+* 1.8
+  - Carry out some minor optimisations - produced a 6% speed increase for the simple send_more_money example.
 * 1.7
   - Make choice iteration more generic by having choice iterators generate Choice objects that are responsible for making the choice.
   - Update the examples and README to use these choice iterators.
