@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pl-search
-Version: 1.8
+Version: 1.9
 Summary: A module for searching and constraint programming using Prolog ideas.
 Home-page: https://github.com/pjritee/pl_search.git
 Author: Peter Robinson
@@ -324,6 +324,8 @@ In the above example we still use ```VarChoice``` as we are simply unifying two 
 
 ## Version History
 
+* 1.8
+  - Carry out some minor optimisations - produced a 6% speed increase for the simple send_more_money example.
 * 1.7
   - Make choice iteration more generic by having choice iterators generate Choice objects that are responsible for making the choice.
   - Update the examples and README to use these choice iterators.

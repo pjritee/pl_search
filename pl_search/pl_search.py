@@ -75,8 +75,8 @@ class Member(pls.Pred):
 
 The management of calling predicates and backtracking is done in Engine.
 
-The programmer will typically inherit from the Success predicate that will
-print out the answer as part of it's make_call.
+The programmer will typically inherit from DetPred that will print out
+the answer as part of it's make_call.
 
 The equivalent of calling the query might be something like
 
@@ -187,7 +187,6 @@ class Pred(ABC):
                 # the call succeeded - call the next predicate
                 return engine._push_and_call(self.continuation)
             # the call failed
-            #engine._pop_call()
             return Status.FAILURE
         except StopIteration:
             # The choices have been exhausted - no more solutions
@@ -210,33 +209,31 @@ class SemiDetPred(Pred):
     """ A semi-deterministic predicate (0 or 1 solutions). 
     As any predicate that inherits from SemiDetPred is semi-deterministic the 
     programmer is not required to define choice_iterator. 
-    Also, as None is passed into try_choice then the
-    programmer should ignore the argument when implementing try_choice.
     """
 
     def _try_call(self) -> Status:
         # remove this pred from stack as it's no longer required
         engine._env_stack.pop()
-        if self.try_choice(None):
+        if self.test_choice():
             return engine._push_and_call(self.continuation)
         return Status.FAILURE
 
-class DetPred(SemiDetPred):
+class DetPred(Pred):
     """ A deterministic predicate (exectly one solutions).
-    try_choice shouldn't be defined - all the work should be done
-    in initialize_call.
+    As any predicate that inherits from DetPred is deterministic the 
+    programmer is not required to define choice_iterator. 
+    All the work should be done in initialize_call.
     """
-    def try_choice(self, _):
-        return True
+    def _try_call(self) -> Status:
+        # remove this pred from stack as it's no longer required
+        engine._env_stack.pop()
+        return engine._push_and_call(self.continuation)
     
 class Exit(Pred):
     """A special predicate to exit engine execution - for internal use."""
 
     def initialize_call(self):
         pass
-
-    def try_choice(self, _) -> bool:
-        return True
 
     def _try_call(self) -> Status:
         return Status.EXIT
@@ -254,9 +251,6 @@ class Fail(Pred):
         # making the iterator empty causes this predicate to fail
         # when called
         self.choice_iterator = iter([])
-
-    def try_choice(self, _) -> bool:
-        return False
 
     def __repr__(self):
         return 'Fail Predicate'
