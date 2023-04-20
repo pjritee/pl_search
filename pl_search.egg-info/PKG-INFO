@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pl-search
-Version: 1.9
+Version: 1.10
 Summary: A module for searching and constraint programming using Prolog ideas.
 Home-page: https://github.com/pjritee/pl_search.git
 Author: Peter Robinson
@@ -323,7 +323,12 @@ class SetChoicePred(pls.Pred):
 In the above example we still use ```VarChoice``` as we are simply unifying two terms. In an even more sophisticated example, each choice might mean the addition of some sort of constraint. In that case we would need to define a choice iterator class  as well as a Choice class for adding the constraint.
 
 ## Version History
-
+* 1.10
+  - Fix problem when calculating continuations for more complex examples typically containing a conjunction within another predicate.
+  - Add the NotNot meta-predicate
+  - Update the test program
+* 1.9
+  - Simplify SemiDetPred and DetPred
 * 1.8
   - Carry out some minor optimisations - produced a 6% speed increase for the simple send_more_money example.
 * 1.7

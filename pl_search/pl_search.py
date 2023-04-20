@@ -133,6 +133,16 @@ pred1 ; pred2 ; pred3
 by using 
 
 Disjunction([pred1, pred2, pred3]).
+
+In some situations the programmer might want to see if a predicate has a 
+solution but without any instantiations (bindings) of variables in the call 
+persisting. This can be done with the equivalent of \+ \+ pred (not not) in 
+Prolog as follows.
+
+NotNot(pred)
+
+This will return True iff pred returns True but with the bindings of any 
+variables bound during the computation undone.
 """
 
 from enum import Enum, auto
@@ -168,7 +178,15 @@ class Pred(ABC):
             self._continuation = cont
         else:
             self._continuation = cont
-            
+
+    def last_pred(self):
+        """Follow the continuation chain returning the last pred in the chain."""
+        if self.continuation is None:
+            return self
+        else:
+            return self.continuation.last_pred()
+
+        
     def _call_pred(self) -> Status:
         """ Call the predicate. For internal use. """
         self.initialize_call()
@@ -400,6 +418,15 @@ class Engine:
         while not isinstance(pred, Once):
             pred,_ = self._env_stack.pop()
 
+    def _pop_to_after_not_not_(self):
+        """ This is to support Not by removing all calls at the top of 
+        env_stack back to (but not including) the previous NotNot entry. Note
+        the backtracking is NOT done.
+        """
+        pred,_ = self._env_stack[-1]       
+        while not isinstance(pred, NotNot):
+            self._env_stack.pop()
+            pred,_ = self._env_stack[-1]       
             
     def _current_call(self) -> Pred:
         """Return the current (top) call on the environment stack."""
@@ -572,8 +599,10 @@ def conjunct(predlst:list[Pred]) -> Pred:
     """Return a single Pred created by chaining their continuations - the
     same as a sequence of conjunctions in Prolog.
     """
-    for p1, p2 in zip(predlst[:-1], predlst[1:]):
-        p1.continuation = p2
+    if predlst == []:
+        return None
+    for i in range(len(predlst)-1):
+        predlst[i].last_pred().continuation = predlst[i+1]
     return predlst[0]
 
 class LoopBodyFactory(Protocol):
@@ -608,13 +637,14 @@ class Loop(Pred):
         if self.body_factory.loop_continues():
             pred = self.body_factory.make_body_pred()
             # reuse this object as the continuation for pred
-            pred.continuation = self
+            pred.last_pred().continuation = self
             return engine._push_and_call(pred)
+
         return engine._push_and_call(self.continuation)
             
 
     def __repr__(self):
-        return f'Loop(self.body_factory) : {self.continuation}'
+        return f'Loop({self.body_factory}) : {self.continuation}'
 
 class _OnceEnd(DetPred):
     """For internal use only. A dummy predicate that when called pops
@@ -661,9 +691,59 @@ class Disjunction(Pred):
     def _try_call(self) -> Status:
         try:
             pred = next(self.choice_iterator)
-            pred.continuation = self.continuation
+            pred.last_pred().continuation = self.continuation
             return engine._push_and_call(pred)
         except StopIteration:
             engine._pop_call()
             return Status.FAILURE
             
+
+    def __repr__(self):
+        return f'Disjunction({self.pred_list}) : {self.continuation}'
+
+class _NotNotEnd(DetPred):
+    """For internal use only. A dummy predicate that when called pops
+    the environment (call stack) back to just after the  closest
+    NotNot entry."""
+
+    def initialize_call(self):
+        pass
+    
+    def _try_call(self) -> Status:
+        engine._pop_to_after_not_not_()
+        return Status.SUCCESS
+            
+
+    
+class NotNot(Pred):
+    """NotNot(pred) returns True iff pred returns True but with all variable
+    bindings created by calling pred removed. Like Prolog's \+ \+ pred
+    """
+
+    def __init__(self, pred):
+        """ pred is the predicate that NotNot applies to."""
+        self._pred = pred
+        self.succeeded = False
+
+    def initialize_call(self):
+        self.choice_iterator = iter([1,2])
+
+    def _try_call(self) -> Status:
+        try:
+            i = next(self.choice_iterator)
+            if i == 1:
+                # the first choice is like Once(pred), Fail
+                # except we remember if pred succeeds
+                self._pred.last_pred().continuation  = _NotNotEnd()
+                if engine._push_and_call(self._pred) == Status.SUCCESS:
+                    self.succeeded = True
+                return Status.FAILURE
+            if self.succeeded:
+               return engine._push_and_call(self.continuation)
+            return self.Status.FAILURE
+        except StopIteration:
+            engine._pop_call()
+            return Status.FAILURE
+    
+    def __repr__(self):
+        return f'NotNot({self._pred})'

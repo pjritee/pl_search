@@ -121,12 +121,16 @@ Once Test Without Once
 [2, 2, 1]
 [2, 2, 2]
 Once Test
+['after once']
 [1, 1, 1]
 [1, 1, 2]
+['after once']
 [2, 1, 1]
 [2, 1, 2]
 Disjunction Test
+['first choice', 1]
 [1, 1]
+['first choice', 2]
 [2, 1]
 [a, 1]
 [b, 1]
@@ -154,6 +158,9 @@ SetChoiceIterator Test
 [2, 3]
 [2, 4]
 [3, 4]
+NotNot Test
+['after member call', 1]
+['at end of call', X01]
 """
 
 def run_tests():
@@ -187,13 +194,16 @@ def run_tests():
                                      FailPrint([v1,v2,v3])]))
     print("Once Test")
     pls.engine.execute(pls.conjunct([Member(v1, [1,2]),
-                                     pls.Once(Member(v2, [1,2])),
+                                     pls.conjunct([
+                                         pls.Once(Member(v2, [1,2])),
+                                         Print(['after once'])]),
                                      Member(v3, [1,2]),
                                      FailPrint([v1,v2,v3])]))
 
     print("Disjunction Test")
-    pls.engine.execute(pls.conjunct([pls.Disjunction([Member(v1, [1,2]),
-                                                      Member(v1, ['a', 'b'])]),
+    pls.engine.execute(pls.conjunct([pls.Disjunction(
+        [pls.conjunct([Member(v1, [1,2]), Print(["first choice", v1])]),
+         Member(v1, ['a', 'b'])]),
                                      pls.Once(Member(v2, [1,2])),
                                      Print([v1,v2]),
                                      pls.fail]))
@@ -209,6 +219,12 @@ def run_tests():
     pls.engine.execute(pls.conjunct([SetChoicePred([v1,v2], [1,2,3,4]),
                                      Print([v1,v2]),
                                      pls.fail]))
+    print("NotNot Test")
+    pls.engine.execute(pls.conjunct(
+        [pls.NotNot(pls.conjunct([Member(v1, [1,2]),
+                                  Print(["after member call", v1])])),
+         Print(['at end of call', v1])]))
+    
 
 def test():
     test_stdout = StringIO()

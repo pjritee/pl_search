@@ -313,6 +313,10 @@ class SetChoicePred(pls.Pred):
 In the above example we still use ```VarChoice``` as we are simply unifying two terms. In an even more sophisticated example, each choice might mean the addition of some sort of constraint. In that case we would need to define a choice iterator class  as well as a Choice class for adding the constraint.
 
 ## Version History
+* 1.10
+  - Fix problem when calculating continuations for more complex examples typically containing a conjunction within another predicate.
+  - Add the NotNot meta-predicate
+  - Update the test program
 * 1.9
   - Simplify SemiDetPred and DetPred
 * 1.8
