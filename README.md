@@ -4,7 +4,7 @@ There are several Python constraint solvers but it appears that they are tailore
 
 Being more generic means that the programmer may have more work to do that in other constraint solvers.
 
-The top-level docstring in `pl_search/pl_search.py` gives details of the module and `examples/send_more_money.py` is an example of the use of this module. Further `test/test1.py` has a collection of various simple searches.
+The top-level docstring in `pl_search/__init__.py` gives details of the module and `examples/send_more_money.py` is an example of the use of this module. Further `test/test1.py` has a collection of various simple searches.
 
 ## Installation
 
