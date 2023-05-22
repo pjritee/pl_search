@@ -57,7 +57,7 @@ class MSVar(pls.Var):
         return super().bind(n)
 
     def get_choices(self):
-        known_disjoints = {pls.engine.dereference(n) for n in self.disjoints
+        known_disjoints = {pls.dereference(n) for n in self.disjoints
                            if not pls.var(n)}
         return CHOICES.difference(known_disjoints)
 ```
@@ -129,7 +129,7 @@ def check_constraints(constraints):
                 # solved constraint
                 continue
             var_lhs = [x for x in lhs if  pls.var(x)]
-            ground_lhs = [pls.engine.dereference(x) for x in lhs
+            ground_lhs = [pls.dereference(x) for x in lhs
                           if not x in var_lhs]
             new_rhs = rhs - sum(ground_lhs)
             if var_lhs == []:
@@ -157,7 +157,7 @@ def check_constraints(constraints):
 ```
 `pl_search` contains an `Engine` class and an instance `engine` of that class.
 The `engine` object is responsible for executing predicates, including managing backtracking. Notice that we use `pls.engine.unify` rather than `bind`
-as `bind` does not trail the variable and so the binding would not be undone on backtracking. We also use `pls.engine.dereference(x)` although in this case we could have used `x.deref()` because we know x is a variable (that might be bound). In general it's better to use `pls.engine.dereference` as this also works as expected when the argument is not a variable.
+as `bind` does not trail the variable and so the binding would not be undone on backtracking. We also use `pls.dereference(x)` although in this case we could have used `x.deref()` because we know x is a variable (that might be bound). In general it's better to use `pls.dereference` as this also works as expected when the argument is not a variable.
 
 Note, above, that `c` is an `UpdatableVar` and `c.value` is the current values for `c` and `pls.engine.unify(c, (var_lhs, new_rhs))` assigns this new value to `c`. The old value of `c` is trailed so that, on backtracking, the old value will be restored.
 
@@ -194,7 +194,7 @@ class Print(pls.DetPred):
 
     def initialize_call(self):
         for j in range(N):
-            print(''.join(f'{str(pls.engine.dereference(self.array[j][i])):>5}'
+            print(''.join(f'{str(pls.dereference(self.array[j][i])):>5}'
                            for i in range(N)))
         print()
 ```
@@ -313,6 +313,8 @@ class SetChoicePred(pls.Pred):
 In the above example we still use ```VarChoice``` as we are simply unifying two terms. In an even more sophisticated example, each choice might mean the addition of some sort of constraint. In that case we would need to define a choice iterator class  as well as a Choice class for adding the constraint.
 
 ## Version History
+* 1.11
+  - Re-factor code - split code into multiple files, change dereference from a method to a function
 * 1.10
   - Fix problem when calculating continuations for more complex examples typically containing a conjunction within another predicate.
   - Add the NotNot meta-predicate

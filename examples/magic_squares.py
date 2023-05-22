@@ -26,7 +26,7 @@ class MSVar(pls.Var):
 
     def get_choices(self):
         """Return a list containing the possible valid choices"""
-        known_disjoints = {pls.engine.dereference(n) for n in self.disjoints
+        known_disjoints = {pls.dereference(n) for n in self.disjoints
                            if not pls.var(n)}
         return CHOICES.difference(known_disjoints)
     
@@ -38,7 +38,7 @@ class Print(pls.DetPred):
 
     def initialize_call(self):
         for j in range(N):
-            print(''.join(f'{str(pls.engine.dereference(self.array[j][i])):>5}'
+            print(''.join(f'{str(pls.dereference(self.array[j][i])):>5}'
                            for i in range(N)))
         print()
 
@@ -67,7 +67,7 @@ def check_constraints(constraints):
                 # solved constraint
                 continue
             var_lhs = [x for x in lhs if  pls.var(x)]
-            ground_lhs = [pls.engine.dereference(x) for x in lhs 
+            ground_lhs = [pls.dereference(x) for x in lhs 
                           if not x in var_lhs]
             new_rhs = rhs - sum(ground_lhs)
             if var_lhs == []:

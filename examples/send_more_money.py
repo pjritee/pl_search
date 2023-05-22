@@ -57,7 +57,7 @@ class PuzzleVar(pls.Var):
     # As variables get bound to digits those digits are no longer
     # possible choices for other variables.
     def get_choices(self):
-        known_disjoints = {pls.engine.dereference(n) for n in self.disjoints
+        known_disjoints = {pls.dereference(n) for n in self.disjoints
                            if not pls.var(n)}
         return self.choices.difference(known_disjoints)
 
@@ -109,8 +109,8 @@ class SmartPuzzlePred(PuzzlePred):
         while progress:
             progress = False
             for left, right in self.constraint_sums:
-                left = [pls.engine.dereference(x) for x in left]
-                right = [pls.engine.dereference(x) for x in right]
+                left = [pls.dereference(x) for x in left]
+                right = [pls.dereference(x) for x in right]
                 ground_left = [x for x in left if not pls.var(x)]
                 ground_right = [x for x in right if not pls.var(x)]
                 

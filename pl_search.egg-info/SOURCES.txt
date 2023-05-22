@@ -2,7 +2,11 @@ LICENSE.txt
 README.md
 setup.py
 pl_search/__init__.py
-pl_search/pl_search.py
+pl_search/choice.py
+pl_search/engine.py
+pl_search/pl_vars.py
+pl_search/pred.py
+pl_search/status.py
 pl_search.egg-info/PKG-INFO
 pl_search.egg-info/SOURCES.txt
 pl_search.egg-info/dependency_links.txt
