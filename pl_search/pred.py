@@ -121,19 +121,6 @@ class DetPred(Pred):
         engine._env_stack.pop()
         return engine._push_and_call(self.continuation)
     
-class Exit(Pred):
-    """A special predicate to exit engine execution - for internal use."""
-
-    def initialize_call(self):
-        pass
-
-    def _try_call(self) -> Status:
-        return Status.EXIT
-    
-    def __repr__(self):
-        return 'Exit Predicate'
-
-
     
 class Fail(Pred):
     """Similar to 'fail' in Prolog - typically used as a continuation
@@ -147,9 +134,8 @@ class Fail(Pred):
     def __repr__(self):
         return 'Fail Predicate'
 
-# We only need one instance of Fail and Exit
+# We only need one instance of Fail
 fail = Fail()
-_exit = Exit()
 
 
 
