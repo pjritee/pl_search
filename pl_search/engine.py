@@ -27,7 +27,6 @@ The definition of Engine - an approximation of the way predicate execution
 is manages in Prolog.
 """
 
-from .status import *
 from .pl_vars import *
 
 def dereference(t1:object) -> object:
@@ -116,12 +115,12 @@ class Engine:
             v, oldvalue = trail_stk.pop()
             v.reset(oldvalue)
 
-    def _push_and_call(self, pred:"Pred") -> Status:
+    def _push_and_call(self, pred:"Pred") -> bool:
         """Add a new predicate to the environment stack and
         call that predicate.
         """
         if pred is None:
-            return Status.SUCCESS
+            return True
         # Add pred to the environment stack
         self._env_stack.append((pred, len(self._trail_stack)))
         return pred._call_pred()
@@ -165,23 +164,23 @@ class Engine:
         """Execute (call) the supplied predicate returning True
         iff the call succeeds.
         """
-        status = self._push_and_call(pred)
+        has_succeeded = self._push_and_call(pred)
 
-        while status == Status.FAILURE:
+        while not has_succeeded:
             if self._env_stack == []:
-                status = Status.EXIT
-                continue
+                # backtracked past the first predicate on the call stack
+                break
             # backtrack and retry the current call
             self._backtrack()
             pred_call = self._current_call()
-            status = pred_call._try_call()
+            has_succeeded = pred_call._try_call()
         # Note that the following clears the environment stack
         # including backtracking over all variable bindings
         # and so all binding created by a successful search will be lost.
         # This means the programmer will need to output any relevant
         # information from a successful search in the continuation. 
         self._clear_env_stack()
-        return status == Status.SUCCESS
+        return has_succeeded
 
 
 

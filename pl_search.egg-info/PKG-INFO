@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pl-search
-Version: 1.12
+Version: 1.13
 Summary: A module for searching and constraint programming using Prolog ideas.
 Home-page: https://github.com/pjritee/pl_search.git
 Author: Peter Robinson
@@ -323,6 +323,8 @@ class SetChoicePred(pls.Pred):
 In the above example we still use ```VarChoice``` as we are simply unifying two terms. In an even more sophisticated example, each choice might mean the addition of some sort of constraint. In that case we would need to define a choice iterator class  as well as a Choice class for adding the constraint.
 
 ## Version History
+* 1.12
+  - Removing the need for the EXIT status means that the call status can be replaced by a boolean.
 * 1.11
   - Re-factor code - split code into multiple files, change dereference from a method to a function
 * 1.10

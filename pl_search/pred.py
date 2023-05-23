@@ -24,7 +24,6 @@
 
 from abc import ABC, abstractmethod
 from typing import Protocol
-from .status import *
 from .engine import *
 
 """
@@ -61,7 +60,7 @@ class Pred(ABC):
             return self.continuation.last_pred()
 
         
-    def _call_pred(self) -> Status:
+    def _call_pred(self) -> bool:
         """ Call the predicate. For internal use. """
         self.initialize_call()
         return self._try_call()
@@ -71,7 +70,7 @@ class Pred(ABC):
         if a test is required for the given choice."""
         return True
     
-    def _try_call(self) -> Status:
+    def _try_call(self) -> bool:
         """ Try the alternative choices. For internal use. """
         try:
             if next(self.choice_iterator).apply_choice() and \
@@ -79,11 +78,11 @@ class Pred(ABC):
                 # the call succeeded - call the next predicate
                 return engine._push_and_call(self.continuation)
             # the call failed
-            return Status.FAILURE
+            return False
         except StopIteration:
             # The choices have been exhausted - no more solutions
             engine._pop_call()
-            return Status.FAILURE
+            return False
 
     @abstractmethod
     def initialize_call(self):
@@ -103,12 +102,11 @@ class SemiDetPred(Pred):
     programmer is not required to define choice_iterator. 
     """
 
-    def _try_call(self) -> Status:
+    def _try_call(self) -> bool:
         # remove this pred from stack as it's no longer required
         engine._env_stack.pop()
-        if self.test_choice():
-            return engine._push_and_call(self.continuation)
-        return Status.FAILURE
+        return self.test_choice() and \
+            engine._push_and_call(self.continuation)
 
 class DetPred(Pred):
     """ A deterministic predicate (exectly one solutions).
@@ -116,7 +114,7 @@ class DetPred(Pred):
     programmer is not required to define choice_iterator. 
     All the work should be done in initialize_call.
     """
-    def _try_call(self) -> Status:
+    def _try_call(self) -> bool:
         # remove this pred from stack as it's no longer required
         engine._env_stack.pop()
         return engine._push_and_call(self.continuation)
@@ -175,7 +173,7 @@ class Loop(Pred):
     def initialize_call(self):
         pass
 
-    def _try_call(self) -> Status:
+    def _try_call(self) -> bool:
         # remove Loop pred from stack as it's no longer required
         engine._env_stack.pop()
         if self.body_factory.loop_continues():
@@ -198,7 +196,7 @@ class _OnceEnd(DetPred):
     def initialize_call(self):
         pass
     
-    def _try_call(self) -> Status:
+    def _try_call(self) -> bool:
         engine._pop_to_pred_(Once)
         return engine._push_and_call(self.continuation)
             
@@ -215,7 +213,7 @@ class Once(DetPred):
     def initialize_call(self):
         pass
     
-    def _try_call(self) -> Status:
+    def _try_call(self) -> bool:
         self._pred.continuation = _OnceEnd()
         self._pred.continuation.continuation = self.continuation
         return engine._push_and_call(self._pred)
@@ -232,14 +230,14 @@ class Disjunction(Pred):
     def initialize_call(self):
         self.choice_iterator = iter(self.pred_list)
 
-    def _try_call(self) -> Status:
+    def _try_call(self) -> bool:
         try:
             pred = next(self.choice_iterator)
             pred.last_pred().continuation = self.continuation
             return engine._push_and_call(pred)
         except StopIteration:
             engine._pop_call()
-            return Status.FAILURE
+            return False
             
 
     def __repr__(self):
@@ -253,9 +251,9 @@ class _NotNotEnd(DetPred):
     def initialize_call(self):
         pass
     
-    def _try_call(self) -> Status:
+    def _try_call(self) -> bool:
         engine._pop_to_after_pred_(NotNot)
-        return Status.SUCCESS
+        return True
             
 
     
@@ -272,22 +270,20 @@ class NotNot(Pred):
     def initialize_call(self):
         self.choice_iterator = iter([1,2])
 
-    def _try_call(self) -> Status:
+    def _try_call(self) ->bool:
         try:
             i = next(self.choice_iterator)
             if i == 1:
                 # the first choice is like Once(pred), Fail
                 # except we remember if pred succeeds
                 self._pred.last_pred().continuation  = _NotNotEnd()
-                if engine._push_and_call(self._pred) == Status.SUCCESS:
+                if engine._push_and_call(self._pred):
                     self.succeeded = True
-                return Status.FAILURE
-            if self.succeeded:
-               return engine._push_and_call(self.continuation)
-            return self.Status.FAILURE
+                return False
+            return self.succeeded and engine._push_and_call(self.continuation)
         except StopIteration:
             engine._pop_call()
-            return Status.FAILURE
+            return False
     
     def __repr__(self):
         return f'NotNot({self._pred})'
