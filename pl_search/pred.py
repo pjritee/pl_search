@@ -47,10 +47,7 @@ class Pred(ABC):
     
     @continuation.setter
     def continuation(self, cont):
-        if self.continuation is None:
-            self._continuation = cont
-        else:
-            self._continuation = cont
+        self._continuation = cont
 
     def last_pred(self):
         """Follow the continuation chain returning the last pred in the chain."""

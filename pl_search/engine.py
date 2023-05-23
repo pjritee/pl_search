@@ -141,7 +141,7 @@ class Engine:
             pred,_ = self._env_stack.pop()
 
     def _pop_to_after_pred_(self, after_pred):
-        """ This is to support Not by removing all calls at the top of 
+        """ This is to support NotNot by removing all calls at the top of 
         env_stack back to (but not including) the previous NotNot entry. Note
         the backtracking is NOT done.
         """
