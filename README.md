@@ -179,8 +179,12 @@ Notice that we were able to deduce `X03` must be 6 and that several of the const
 
 Now that we have the basic machinery we are ready to define predicates to carry out the search.
 
-When we execute (call) a predicate there are two possible outcomes. One is that the call fails and the other is that it succeeds. In both cases `engine` will carry out a complete reset - equivalent to backtracking to before the call to the predicate. This means that, even on success, the variable bindings
-will be undone and so, in order to get solutions we need to either print them
+When we execute (call) a predicate there are two possible outcomes. One is that the call fails and the other is that it succeeds. On failure, all bindings created during execute will be undone. If execute succeeds then, depending on how execute is called, all the bindings will be removed (the default) or
+all bindings will be kept. For a top-level call on execute it might be best to use the default so
+as bindings don't interfere with further computations. For calling execute within execute the default
+is like using the `NotNot` predicate while the alternative behaviour is like using a `Once` predicate.
+
+If the default behaviour is used, in order to get solutions, we need to either print them
 or deal with solutions some other way inside a predicate - for example store them away, send them as a message or put them on a queue.
 
 Below is a predicate definition that prints the array when called.
@@ -281,6 +285,13 @@ On the other hand, if we want all solutions we can try:
 ```
 pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square), pls.fail])
 ```
+Also note that, for a single solution, we could have used
+
+```
+pls.engine.execute(pls.Loop(MSFactory(constraints, all_vars)), False)
+```
+and printed out the solution after this as solution bindings will be preserved.
+
 The meta-predicate `pls.conjunct` conjoins a list of predicates into one predicate by chaining the predicates continuations and is like conjunction in Prolog. The builtin predicate `pls.fail` simply fails, triggering backtracking (like fail in Prolog).
 
 For this problem we use the builtin ```VarChoiceIterator``` because we simply need to try each choice for a given variable. In more complicated situations the programmer might need to define their own choice iterator.
@@ -312,7 +323,12 @@ class SetChoicePred(pls.Pred):
 ```
 In the above example we still use ```VarChoice``` as we are simply unifying two terms. In an even more sophisticated example, each choice might mean the addition of some sort of constraint. In that case we would need to define a choice iterator class  as well as a Choice class for adding the constraint.
 
+
+
 ## Version History
+* 1.14
+  - Update execute so that execute can be called within an outer execute.
+  - Add a flag for execute so that bindings can be kept when execute terminates.
 * 1.13
   - Clean up continuation setter code.
 * 1.12

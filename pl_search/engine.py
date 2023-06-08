@@ -154,32 +154,34 @@ class Engine:
         """Return the current (top) call on the environment stack."""
         return self._env_stack[-1][0]
 
-    def _clear_env_stack(self):
+    def _clear_env_stack_to(self, previous_top_of_stack):
         """This is used to completely clean up after the execution is complete.
-        All variables are reset to their original values."""
-        while self._env_stack:
+        All variables bound after previous_top_of_stackare reset to their 
+        original values."""
+        while len(self._env_stack) > previous_top_of_stack:
             self._pop_call()
 
-    def execute(self, pred:"Pred") -> bool:
+    def execute(self, pred:"Pred", unbind:bool = True) -> bool:
         """Execute (call) the supplied predicate returning True
-        iff the call succeeds.
+        iff the call succeeds. If unbind is True then all bindings
+        done during the computation will be undone.
         """
+        top_of_env_stack = len(self._env_stack)
+
         has_succeeded = self._push_and_call(pred)
 
         while not has_succeeded:
-            if self._env_stack == []:
-                # backtracked past the first predicate on the call stack
+            if len(self._env_stack) == top_of_env_stack:
+                # backtracked past the first predicate for this computation
+                # on the call stack
                 break
             # backtrack and retry the current call
             self._backtrack()
             pred_call = self._current_call()
             has_succeeded = pred_call._try_call()
-        # Note that the following clears the environment stack
-        # including backtracking over all variable bindings
-        # and so all binding created by a successful search will be lost.
-        # This means the programmer will need to output any relevant
-        # information from a successful search in the continuation. 
-        self._clear_env_stack()
+        if unbind:
+            # remove all bindings for this computation
+            self._clear_env_stack_to(top_of_env_stack)
         return has_succeeded
 
 

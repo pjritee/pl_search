@@ -93,7 +93,24 @@ class SetChoicePred(pls.Pred):
 
     def initialize_call(self):
         self.choice_iterator = SetChoiceIterator(self.vars_, self.choices)
-    
+
+
+class TestExecute(pls.Pred):
+    def __init__(self, v, choices, allowed, unbind = True):
+        self.v = v
+        self.choices = choices
+        self.allowed = allowed
+        self.unbind = unbind
+        
+    def initialize_call(self):
+        self.choice_iterator = pls.VarChoiceIterator(self.v, self.choices)
+
+    def test_choice(self):
+        result = pls.engine.execute(Member(self.v, self.allowed), self.unbind)
+        return result
+
+
+        
 EXPECTED_OUTPUT = """All solutions using FailPrint
 [1, a]
 [1, b]
@@ -161,6 +178,12 @@ SetChoiceIterator Test
 NotNot Test
 ['after member call', 1]
 ['at end of call', X01]
+Inner Execute Test with Unbind
+[3]
+After Inner Execute Test with Unbind v1 = X01
+Inner Execute Test without Unbind
+[3]
+After Inner Execute Test without Unbind v1 = 3
 """
 
 def run_tests():
@@ -224,6 +247,17 @@ def run_tests():
         [pls.NotNot(pls.conjunct([Member(v1, [1,2]),
                                   Print(["after member call", v1])])),
          Print(['at end of call', v1])]))
+
+    print("Inner Execute Test with Unbind")
+    pls.engine.execute(pls.conjunct([TestExecute(v1, [1,2,3,4], [3]),
+                                     Print([v1])]))
+    print(f'After Inner Execute Test with Unbind {v1 = }')
+    
+    print("Inner Execute Test without Unbind")
+    pls.engine.execute(pls.conjunct([TestExecute(v1, [1,2,3,4], [3]),
+                                     Print([v1])]), False)
+    print(f'After Inner Execute Test without Unbind {v1 = }')
+    
     
 
 def test():
