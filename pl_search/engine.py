@@ -110,6 +110,7 @@ class Engine:
         """ Backtrack over all variables in the trail and remove all
         entries on the environment stack
         """
+        trail_stk = self._trail_stack
         while len(trail_stk) > 0:
             v, oldvalue = trail_stk.pop()
             v.reset(oldvalue)
