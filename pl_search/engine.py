@@ -106,6 +106,15 @@ class Engine:
             return t2.unify_with(t1)
         return False
 
+    def reset(self):
+        """ Backtrack over all variables in the trail and remove all
+        entries on the environment stack
+        """
+        while len(trail_stk) > 0:
+            v, oldvalue = trail_stk.pop()
+            v.reset(oldvalue)
+        self._env_stack = []
+
     def _backtrack(self):
         """Backtrack (reset all varible bindings) as a consequence of calling
         the 'current' predicate"""

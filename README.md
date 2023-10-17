@@ -326,6 +326,8 @@ In the above example we still use ```VarChoice``` as we are simply unifying two 
 
 
 ## Version History
+* 1.15
+  - Add a reset method to Engine that does a full backtrack and removes all entries on the environment stack.
 * 1.14
   - Update execute so that execute can be called within an outer execute.
   - Add a flag for execute so that bindings can be kept when execute terminates.
