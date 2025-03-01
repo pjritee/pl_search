@@ -323,7 +323,8 @@ class SetChoicePred(pls.Pred):
 ```
 In the above example we still use ```VarChoice``` as we are simply unifying two terms. In an even more sophisticated example, each choice might mean the addition of some sort of constraint. In that case we would need to define a choice iterator class  as well as a Choice class for adding the constraint.
 
-
+## TODO
+There is now a C++ version of pl_search in the pl_search_cpp repository. Improvements made in that version need to be applied to this version.
 
 ## Version History
 * 1.15

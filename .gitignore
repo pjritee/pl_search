@@ -1,1 +1,5 @@
 *.pyc
+temp
+test
+examples/multi_search.py
+make_it
