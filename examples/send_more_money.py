@@ -59,24 +59,14 @@ class PuzzleVar(pls.Var):
     def get_choices(self):
         known_disjoints = {pls.dereference(n) for n in self.disjoints
                            if not pls.var(n)}
-        return self.choices.difference(known_disjoints)
+        return list(self.choices.difference(known_disjoints))
 
 # A predicate for trying alternative choices for an unbound variable.
-class PuzzlePred(pls.Pred):
-    def __init__(self, constraint_sums, all_vars, best_var):
+class PuzzlePred(pls.VarChoicePred):
+    def __init__(self, best_var, choices, constraint_sums):
+        super().__init__(best_var, choices)
         self.constraint_sums = constraint_sums
-        self.all_vars = all_vars
-        self.best_var = best_var
 
-    # This method is required and is used to initialize the predicate call
-    # In this case we pick an unbound variable and determine the possible
-    # choices for this variable. The attribute choice_iterator is used
-    # by the system to backtrack over the possible choices and this attribute
-    # needs to be given a value in this method for nondeterministic predicates.
-    def initialize_call(self):
-        self.choice_iterator = \
-            pls.VarChoiceIterator(self.best_var, self.best_var.get_choices())
-        return True
 
    
     def test_choice(self):
@@ -121,8 +111,8 @@ class SmartPuzzlePred(PuzzlePred):
                     if any(pls.var(x) for x in right):
                         progress = True
                     c,d = divmod(top, 10)
-                    if not pls.engine.unify(right[0], d) or \
-                       not pls.engine.unify(right[1], c):
+                    if not pls.unify(right[0], d) or \
+                       not pls.unify(right[1], c):
                         return False
                 elif len(left) == len(ground_left)+1 and \
                      len(right) == len(ground_right):
@@ -132,7 +122,7 @@ class SmartPuzzlePred(PuzzlePred):
                     left_vars = [v for v in left if v not in right]
                     n = right[0] + 10*right[1] - sum(ground_left)
                     progress = True
-                    if not pls.engine.unify(left_vars[0], n):
+                    if not pls.unify(left_vars[0], n):
                         return False
         return True
 
@@ -147,7 +137,7 @@ class PuzzleFactory(pls.LoopBodyFactory):
 
     # This method is required and is used to determine if the loop
     # predicate should continue.
-    def loop_continues(self) -> bool:
+    def loop_continues(self, _) -> bool:
         # In order to avoid recomputing the best variable in PuzzlePred
         # we compute it here and pass it to the PuzzlePred object
         self.best_var = get_best_var(self.all_vars)
@@ -155,12 +145,12 @@ class PuzzleFactory(pls.LoopBodyFactory):
 
     # This method is required and is used to create a predicate
     # to be called as part of the loop body.
-    def make_body_pred(self) -> pls.Pred:
-        return self.pred(self.constraint_sums, self.all_vars, self.best_var)
+    def make_body_pred(self, _) -> pls.Pred:
+        return self.pred(self.best_var, self.best_var.get_choices(),  self.constraint_sums)
 
 # A predicate to print out the solution
-class SuccessPrint(pls.DetPred):
-    def initialize_call(self):
+class SuccessPrint(pls.Pred):
+    def call(self):
         print(f'   {S}{E}{N}{D}')
         print(f' + {M}{O}{R}{E}')
         print(' ------')
@@ -204,7 +194,7 @@ def solve():
     #factory = PuzzleFactory(PuzzlePred, constraint_sums, all_vars)
     
     pred = pls.conjunct([pls.Loop(factory), SuccessPrint()])
-    result = pls.engine.execute(pred)
+    result = pred.call()
 
     
 if __name__ == "__main__":

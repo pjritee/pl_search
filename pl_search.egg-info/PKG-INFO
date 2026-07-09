@@ -1,5 +1,5 @@
-Metadata-Version: 2.1
-Name: pl-search
+Metadata-Version: 2.4
+Name: pl_search
 Version: 1.15
 Summary: A module for searching and constraint programming using Prolog ideas.
 Home-page: https://github.com/pjritee/pl_search.git
@@ -7,6 +7,13 @@ Author: Peter Robinson
 Author-email: pjr4171@gmail.com
 License: MIT
 License-File: LICENSE.txt
+Dynamic: author
+Dynamic: author-email
+Dynamic: description
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: summary
 
 # A module for searching and constraint programming using Prolog ideas
 
@@ -333,7 +340,8 @@ class SetChoicePred(pls.Pred):
 ```
 In the above example we still use ```VarChoice``` as we are simply unifying two terms. In an even more sophisticated example, each choice might mean the addition of some sort of constraint. In that case we would need to define a choice iterator class  as well as a Choice class for adding the constraint.
 
-
+## TODO
+There is now a C++ version of pl_search in the pl_search_cpp repository. Improvements made in that version need to be applied to this version.
 
 ## Version History
 * 1.15

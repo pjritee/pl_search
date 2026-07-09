@@ -12,7 +12,7 @@ The simplest option is a direct installation from github:
 
 `python3 -m pip install -U git+https://github.com/pjritee/pl_search.git`
 
-The other option is to clone the repository and then, from the top-level of the cloned repository, do a pip install:
+The other option is to clone the repository and then, from the top-level of the cloned repository, do a pip install (probabaly in a virtual environment):
 
 `python3 -m pip install -U .`
 
@@ -40,6 +40,7 @@ SUM = (N * (N2 + 1))//2
 CHOICES = set(range(1,N2+1))
 
 ```
+
 The approach is to create a NxN array containing distinct variables and then use constraint programming and backtrack search to find appropriate values for these variables.
 
 We could use `pls.Var()` but given we need to check that the variables
@@ -61,6 +62,7 @@ class MSVar(pls.Var):
                            if not pls.var(n)}
         return CHOICES.difference(known_disjoints)
 ```
+
 By checking the value for the variable is a valid choice in `bind` we guarantee that the choice for the variable value satisfies the disjointness constraint and comes from the required set. We use `set_disjoint` to set the disjoint list to be all the variables (after all the variables have been created). Later when we start searching we will use `get_choices` to  an iterator to be used to backtrack through possible choices in the search predicate.
 
 We can then create a list of variables, set their disjoints attribute and create a 3x3 array as follows.
@@ -72,10 +74,13 @@ for v in all_vars:
 square = [all_vars[i:i+N] for i in range(0, N2, N)]
 
 ```
+
 If we do that in the interpreter and then look at the value of square we get
+
 ```python
 [[X01, X02, X03], [X04, X05, X06], [X07, X08, X09]]
 ```
+
 where `X01` etc. are the string representations of the variables.
 
 The next step is to consider how we represent the row, column and diagonal sum constraints. The approach taken here is to represent a constraint like
@@ -105,13 +110,15 @@ def generate_constraints(square):
         [pls.UpdatableVar(([square[i][N-1-i] for i in range(N)], SUM))]
     return constraints
 ```
+
 Continuing in the interpreter we get
 
-```
+```python
 >>> generate_constraints(square)
 [UpdatableVar(([X01, X04, X07], 15)), UpdatableVar(([X02, X05, X08], 15)), UpdatableVar(([X03, X06, X09], 15)), UpdatableVar(([X01, X02, X03], 15)), UpdatableVar(([X04, X05, X06], 15)), UpdatableVar(([X07, X08, X09], 15)), UpdatableVar(([X01, X05, X09], 15)), UpdatableVar(([X03, X05, X07], 15))]
 
 ```
+
 Now that we have generated the constraints we need to be able to test them and carry out any possible deductions and so we give the following definition.
 
 ```python
@@ -135,38 +142,38 @@ def check_constraints(constraints):
             if var_lhs == []:
                 if new_rhs == 0:
                     # newly solved constraint
-                    pls.engine.unify(c, ([], 0))
+                    pls.unify(c, ([], 0))
                 return False
             if new_rhs < 0:
                 # no solution is possible
                 return False
             if len(var_lhs) == 1: # constraint is Var = new_rhs
                 progress = True
-                if not pls.engine.unify(var_lhs[0], new_rhs):
+                if not pls.unify(var_lhs[0], new_rhs):
                     # this fails when new_rhs is too big
                     # or is already taken
                     return False
                 # newly solved constraint
-                pls.engine.unify(c, ([], 0))
+                pls.unify(c, ([], 0))
             elif new_rhs != rhs:
                 # the constraint is simplified
                 progress = True
-                pls.engine.unify(c, (var_lhs, new_rhs))
+                pls.unify(c, (var_lhs, new_rhs))
     return True
 
 ```
-`pl_search` contains an `Engine` class and an instance `engine` of that class.
-The `engine` object is responsible for executing predicates, including managing backtracking. Notice that we use `pls.engine.unify` rather than `bind`
+
+Notice that we use `pls.unify` rather than `bind`
 as `bind` does not trail the variable and so the binding would not be undone on backtracking. We also use `pls.dereference(x)` although in this case we could have used `x.deref()` because we know x is a variable (that might be bound). In general it's better to use `pls.dereference` as this also works as expected when the argument is not a variable.
 
-Note, above, that `c` is an `UpdatableVar` and `c.value` is the current values for `c` and `pls.engine.unify(c, (var_lhs, new_rhs))` assigns this new value to `c`. The old value of `c` is trailed so that, on backtracking, the old value will be restored.
+Note, above, that `c` is an `UpdatableVar` and `c.value` is the current values for `c` and `pls.unify(c, (var_lhs, new_rhs))` assigns this new value to `c`. The old value of `c` is trailed so that, on backtracking, the old value will be restored.
 
 We can test this in the interpreter as, for example:
 
 ```python
->>> pls.engine.unify(all_vars[0], 8)
+>>> pls.unify(all_vars[0], 8)
 True
->>> pls.engine.unify(all_vars[1], 1)
+>>> pls.unify(all_vars[1], 1)
 True
 >>> check_constraints(constraints)
 True
@@ -175,6 +182,7 @@ True
 >>> all_vars
 [8, 1, 6, X04, X05, X06, X07, X08, X09]
 ```
+
 Notice that we were able to deduce `X03` must be 6 and that several of the constraints have been simplified.
 
 Now that we have the basic machinery we are ready to define predicates to carry out the search.
@@ -190,24 +198,24 @@ or deal with solutions some other way inside a predicate - for example store the
 Below is a predicate definition that prints the array when called.
 
 ```python  
-class Print(pls.DetPred):
+class Print(pls.Pred):
     """Pretty print the supplied array."""
 
     def __init__(self, array):
         self.array = array
 
-    def initialize_call(self):
+    def call(self):
         for j in range(N):
             print(''.join(f'{str(pls.dereference(self.array[j][i])):>5}'
                            for i in range(N)))
         print()
+        return True
 ```
-`Print` is declared as a `DetPred` which means it is deterministic - it has exactly one solution. We are required to define `initialize_call` that gets executed as soon as a `Print` predicate is called.
 
 We can test this in the interpreter as follows (continuing on from the earlier interpreter interaction)
 
-```
->>> pls.engine.execute(Print(square))
+```python
+>>> Print(square).call()
     8    1    6
   X04  X05  X06
   X07  X08  X09
@@ -225,6 +233,7 @@ while there are variables left
     if the constraints are satisfiable then continue
     else backtrack and make another choice
 ```
+
 This strategy can be implemented using the `Loop` meta-predicate. This takes a single argument that is a subclass of `LoopBodyFactory` with definitions for `loop_continues` (which returns True if the loop should continue) and `make_body_pred` that generates a predicate to be called in the body of the loop.
 
 Suitable definitions are given below (including `get_best_var`)
@@ -238,135 +247,111 @@ def get_best_var(all_vars):
             return v
     return None
 
-class BodyPred(pls.Pred):
-    def __init__(self, constrains, all_vars, best_var):
+class BodyPred(pls.VarChoicePred):
+    """This predicate is called in the body of Loop.
+    """
+    def __init__(self, best_var, choices, constraints):
+        super().__init__(best_var, choices)
         self.constraints = constraints
-        self.all_vars = all_vars
         self.best_var = best_var
 
-    def initialize_call(self):
-        #required method and self.choice_iterator must be given a value
-        self.choice_iterator = \
-            pls.VarChoiceIterator(self.best_var, self.best_var.get_choices())
-        return True
-
     def test_choice(self):
-        # We need to check the constraints and carry out deductions so this
+        # We need to check the constraints and carry out deductions so this 
         # method is required
         return check_constraints(self.constraints)
 
-class MSFactory(pls.LoopBodyFactory):
-
+lass MSFactory(pls.LoopBodyFactory):
+    """The factory called by Loop."""
+    
     def __init__(self, constraints, all_vars):
         self.constraints =  constraints
         self.all_vars = all_vars
 
-    def loop_continues(self):
+    def loop_continues(self, _):
         self.best_var = get_best_var(self.all_vars)
         return self.best_var is not None
 
-    def make_body_pred(self) -> pls.Pred:
-        return BodyPred(self.constraints, self.all_vars, self.best_var)
+    def make_body_pred(self, _) -> pls.Pred:
+        return BodyPred(self.best_var, self.best_var.get_choices(), self.constraints)
 
 ```
+
 Here we take the simplest approach and choose the first remaining variable in `all_vars` for `get_best_var` but we probably should have chosen a variable from a constraint with the smallest left hand side.
 
 Now we can carry out the search. If we just want the first solution we can try:
+
+```python
+pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square)])->call()
 ```
-pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square)])
-```
+
 and we will get the output
+
 ```
     2    7    6
     9    5    1
     4    3    8
 ```
+
 On the other hand, if we want all solutions we can try:
+
+```python
+pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square), pls.fail]).call()
 ```
-pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square), pls.fail])
-```
+
 Also note that, for a single solution, we could have used
 
+```python
+pls.Loop(MSFactory(constraints, all_vars)), False).call()
 ```
-pls.engine.execute(pls.Loop(MSFactory(constraints, all_vars)), False)
-```
+
 and printed out the solution after this as solution bindings will be preserved.
 
 The meta-predicate `pls.conjunct` conjoins a list of predicates into one predicate by chaining the predicates continuations and is like conjunction in Prolog. The builtin predicate `pls.fail` simply fails, triggering backtracking (like fail in Prolog).
 
-For this problem we use the builtin ```VarChoiceIterator``` because we simply need to try each choice for a given variable. In more complicated situations the programmer might need to define their own choice iterator.
-
-As an example consider the case where we have a list of variables and we want the choices to be all possible sublists (without order) of some list of values. In ```test/test1.py``` we define the following.
-
-```python
-class SetChoiceIterator:
-
-    def __init__(self, vars_, choices):
-        self.vars_ = vars_
-        n = len(vars_)
-        self.choices = itertools.combinations(choices, n)
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        return pls.VarChoice(self.vars_, list(next(self.choices)))
-
-class SetChoicePred(pls.Pred):
-    def __init__(self, vars_, choices):
-        self.vars_ = vars_
-        self.choices = choices
-
-    def initialize_call(self):
-        self.choice_iterator = SetChoiceIterator(self.vars_, self.choices)
-
-```
-In the above example we still use ```VarChoice``` as we are simply unifying two terms. In an even more sophisticated example, each choice might mean the addition of some sort of constraint. In that case we would need to define a choice iterator class  as well as a Choice class for adding the constraint.
-
-## TODO
-There is now a C++ version of pl_search in the pl_search_cpp repository. Improvements made in that version need to be applied to this version.
-
 ## Version History
-* 1.15
+
+- 2.0
+  - This is a major rewrite that parallels the corresponding rewrite in the `pl_search_cpp` repository. Updates to user code approximately follow those listed in the version history for the `pl_search_cpp` version.
+- 1.15
   - Add a reset method to Engine that does a full backtrack and removes all entries on the environment stack.
-* 1.14
+- 1.14
   - Update execute so that execute can be called within an outer execute.
   - Add a flag for execute so that bindings can be kept when execute terminates.
-* 1.13
+- 1.13
   - Clean up continuation setter code.
-* 1.12
+- 1.12
   - Removing the need for the EXIT status means that the call status can be replaced by a boolean.
-* 1.11
+- 1.11
   - Re-factor code - split code into multiple files, change dereference from a method to a function
-* 1.10
+- 1.10
   - Fix problem when calculating continuations for more complex examples typically containing a conjunction within another predicate.
   - Add the NotNot meta-predicate
   - Update the test program
-* 1.9
+- 1.9
   - Simplify SemiDetPred and DetPred
-* 1.8
+- 1.8
   - Carry out some minor optimisations - produced a 6% speed increase for the simple send_more_money example.
-* 1.7
+- 1.7
   - Make choice iteration more generic by having choice iterators generate Choice objects that are responsible for making the choice.
   - Update the examples and README to use these choice iterators.
-* 1.6
+- 1.6
   - Add sections on installation and example use to README
-* 1.5
+- 1.5
   - Improve efficiency of send_more_money example by computing best_var only once per loop iteration
   - add a check to test1.py to determine if output is OK
-* 1.4
+- 1.4
   - Add SemiDetPred (semi-deterministic predicate)
-* 1.3
+- 1.3
   - Add DetPred (deterministic predicate)
   - Update top-level docstring
-* 1.2
+- 1.2
   - Improve efficiency of Loop
-* 1.1
+- 1.1
   - Add Disjunction
   - Fix bug - not untrailing on execute success
-* 1.0
+- 1.0
   - Major rewrite of Pred to simplify the programmers task.
   - The addition of predicate conjunction, looping and once
   - Re-factoring of Engine.
-* 0.1
+- 0.1
   - Initial release.

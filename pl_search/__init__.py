@@ -26,15 +26,21 @@
 This module provides reasonably generic search/constraint solving
 capabilities using Prolog ideas. It does not even come close to an 
 implementation of Prolog - it simply uses ideas from Prolog like variables 
-and backtrack search implemented using a simplified trail and 
-environment stack.
+and backtrack search implemented using a simplified trail.
 
 For a given application the programmer typically defines one or more 
-subclasses of Pred, SemiDetPred or DetPred for carrying out the search. 
-The search is then executed by calling engine.execute on a conjunction of 
-predicates typically ending in a predicate that prints a solution. If all 
-solutions are required then the predicate that prints a solution can be 
-followed by the builtin predicate 'fail' that triggers backtracking.
+subclasses of Pred for carrying out the search. 
+The search is then executed by calling call() on the first predicate of a 
+conjunction of predicates typically ending in a predicate that prints/saves the solution
+and returns True. If all solutions are required then the end predicate should prints/saves 
+the solution and return False. This will trigger backtracking to find other solutions.
+
+Each predicate has a continuation - the predicate to be called if this predicate succeeds.
+When a predicate instance is created its continuation is None (treated as success). The function
+conjunction takes a list of predicates and creates a continuation chain so that, when called,
+each predicate in the chain will call its continuation predicate (if it succeeds). 
+Some meta-predicates like Loop also modify the continuation of predicates.
+
 
 An example of using this module is given in examples/send_more_money.py
 that covers a significant portion of the use of the module. Further 
@@ -51,35 +57,23 @@ where solve is completely implemented in Prolog. Calling this query (a pair
 of predicate calls) would use backtracking search to attempt to find, 
 and print a solution.
 
-Using this module the programmer would need to set up a Python equivalent of
-State using Var objects for the unknowns and then defining a Pred class
-where initialize_call initialises the predicate typically by defining a
-choice iterator and, when needed, test_choice to determine if the choice is 
-valid and to possibly carry out deductions.
+When using this module the programmer would need to set up a Python equivalent of
+State using Var objects for the unknowns and then define a ChoicePred
+or VarChoicePred class where the __init__ method would find one or more
+'interesting' variables and possible choices for the variables. The 
+has_next, make_choice and test_choice methods would then be defined 
+in such a way that the execution of this predicate would try choices 
+one at a time, typically binding variables, and testing state constraints.
 
-The choice iterator needs to generate Choice objects that contain the
-apply_choice method that applies the choice. The simplest choice iterator is 
-the builtin VarChoiceIterator that generates VarChoice objects whose 
-apply_choice method simply unifies the variable with the choice as in the 
-following Member predicate (that is like the Prolog member predicate).
-
-class Member(pls.Pred):
-    def __init__(self, v, choices):
-        self.v = v
-        self.choices = choices
-
-    def initialize_call(self):
-        self.choice_iterator = pls.VarChoiceIterator(self.v, self.choices)
-
-
-The management of calling predicates and backtracking is done in Engine.
-
-The programmer will typically inherit from DetPred that will print out
-the answer as part of it's make_call.
 
 The equivalent of calling the query might be something like
 
-engine.execute(conjunct([Solve(python_state),  Print(python_state)])
+solve_pred = Solve(python_state)
+conjunction([solve_pred,  Print(python_state)])
+solve_pred.call()
+
+where Print is a subclass of Pred where the call method prints out and answer and then 
+returns True.
 
 In Prolog, if we want all solutions, we would write:
 
@@ -87,19 +81,23 @@ In Prolog, if we want all solutions, we would write:
 
 In this case the programmer could write
 
-engine.execute(conjunct([Solve(python_state),  Print(python_state), fail])
+solve_pred = Solve(python_state)
+conjunction([solve_pred,  PrintFail(python_state)])
+solve_pred.call()
 
-where fail is an instance of the Fail predicate and is like the fail 
-predicate in Prolog.
+where PrintFail is a subclass of Pred where the call method prints out and answer and then 
+returns False. Returning False will trigger backtracking to find other solutions.
+
 
 The second approach is to follow a standard Prolog pattern
 
-    solve(State) :-
-        loop_continues(State),
+    solve(State, Depth) :-
+        loop_continues(State, Depth),
         !,
-        body_call(State),
-        solve(State).
-    solve(_).
+        body_call(State, Depth),
+        Depth1 is Depth+1,
+        solve(State, Depth1).
+    solve(_, _).
 
 In this case the programmer can use the Loop predicate that takes a
 LoopBodyFactory. The programmer inherits from LoopBodyFactory and defines 
@@ -111,11 +109,14 @@ The send_more_money uses this approach.
 
 Sometimes, in Prolog, we might break down the search into parts, for example
 
-solve_part1(State), solve_part2(State), solve_part2(State
+solve_part1(State), solve_part2(State), solve_part2(State)
 
 This can be done by creating a conjunct of programmer defined predicate:
 
-conjunct([Solve1(state), Solve2(state), Solve3(state)])
+conjunction([Solve1(state), Solve2(state), Solve3(state)])
+
+This function changes the continuation of each predicate to point at the next 
+predicate in the sequence.
 
 In some cases the programmer might only need the first solution of, say,
 Solve2(state). In this case the programmer can use the Once predicate which is
@@ -135,14 +136,19 @@ Disjunction([pred1, pred2, pred3]).
 
 In some situations the programmer might want to see if a predicate has a 
 solution but without any instantiations (bindings) of variables in the call 
-persisting. This can be done with the equivalent of \+ \+ pred (not not) in 
+persisting. This can be done with the equivalent of \\+ \\+ pred (not not) in 
 Prolog as follows.
 
 NotNot(pred)
 
 This will return True iff pred returns True but with the bindings of any 
 variables bound during the computation undone.
+
+IfThenElse(ifpred, thenpred,elsepred) is a predicate that is equivalent to Prolog's if-then-else:
+
+ifpred-> thenpred ; elsepred
+
 """
 
 from .pred import *
-from .choice import *
+

@@ -28,19 +28,20 @@ class MSVar(pls.Var):
         """Return a list containing the possible valid choices"""
         known_disjoints = {pls.dereference(n) for n in self.disjoints
                            if not pls.var(n)}
-        return CHOICES.difference(known_disjoints)
+        return list(CHOICES.difference(known_disjoints))
     
-class Print(pls.DetPred):
+class Print(pls.Pred):
     """Pretty print the supplied array."""
     
     def __init__(self, array):
         self.array = array
 
-    def initialize_call(self):
+    def call(self):
         for j in range(N):
             print(''.join(f'{str(pls.dereference(self.array[j][i])):>5}'
                            for i in range(N)))
         print()
+        return True
 
 def generate_constraints(square):
     """Return the row, column and diagonal sum constraints."""
@@ -73,7 +74,7 @@ def check_constraints(constraints):
             if var_lhs == []:
                 if new_rhs == 0:
                     # newly solved constraint
-                    pls.engine.unify(c, ([], 0))
+                    pls.unify(c, ([], 0))
                     continue
                 return False
             if new_rhs < 0:
@@ -81,16 +82,16 @@ def check_constraints(constraints):
                 return False
             if len(var_lhs) == 1: # constraint is Var = new_rhs
                 progress = True
-                if not pls.engine.unify(var_lhs[0], new_rhs):
+                if not pls.unify(var_lhs[0], new_rhs):
                     # this fails when new_rhs is too big
                     # or is already taken
                     return False
                 # newly solved constraint
-                pls.engine.unify(c, ([], 0))
+                pls.unify(c, ([], 0))
             elif new_rhs != rhs:
                 # the constraint is simplified
                 progress = True
-                pls.engine.unify(c, (var_lhs, new_rhs))
+                pls.unify(c, (var_lhs, new_rhs))
     return True
 
 def get_best_var(all_vars):
@@ -101,19 +102,13 @@ def get_best_var(all_vars):
             return v
     return None
     
-class BodyPred(pls.Pred):
+class BodyPred(pls.VarChoicePred):
     """This predicate is called in the body of Loop.
     """
-    def __init__(self, constraints, all_vars, best_var):
+    def __init__(self, best_var, choices, constraints):
+        super().__init__(best_var, choices)
         self.constraints = constraints
-        self.all_vars = all_vars
         self.best_var = best_var
-
-    def initialize_call(self):
-        #required method and self.choice_iterator must be given a value
-        self.choice_iterator = \
-            pls.VarChoiceIterator(self.best_var, self.best_var.get_choices())
-        return True
 
     def test_choice(self):
         # We need to check the constraints and carry out deductions so this 
@@ -127,12 +122,12 @@ class MSFactory(pls.LoopBodyFactory):
         self.constraints =  constraints
         self.all_vars = all_vars
 
-    def loop_continues(self):
+    def loop_continues(self, _):
         self.best_var = get_best_var(self.all_vars)
         return self.best_var is not None
 
-    def make_body_pred(self) -> pls.Pred:
-        return BodyPred(self.constraints, self.all_vars, self.best_var)
+    def make_body_pred(self, _) -> pls.Pred:
+        return BodyPred(self.best_var, self.best_var.get_choices(), self.constraints)
 
 def solve(): 
     all_vars = [MSVar() for _ in range(N2)]
@@ -141,10 +136,9 @@ def solve():
     square = [all_vars[i:i+N] for i in range(0, N2, N)]
     constraints = generate_constraints(square)
     # first solution
-    pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square)]))
-    
+    pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square)]).call()
     #all solutions
-    #pls.engine.execute(pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square), pls.fail]))
+    #pls.conjunct([pls.Loop(MSFactory(constraints, all_vars)), Print(square), pls.fail]).call()
 
 
 if __name__ == "__main__":
